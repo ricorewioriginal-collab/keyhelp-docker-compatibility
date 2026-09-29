@@ -27,7 +27,7 @@ Run as root on a KeyHelp server:
 ```bash
 git clone https://github.com/ricorewioriginal-collab/keyhelp-docker-compatibility.git
 cd keyhelp-docker-compatibility
-sudo ./install.sh
+sudo bash ./install.sh
 ```
 
 The installer creates a backup before modifying the KeyHelp sidebar. Reload KeyHelp with Ctrl+F5 after installation.
@@ -35,9 +35,12 @@ The installer creates a backup before modifying the KeyHelp sidebar. Reload KeyH
 ## Update / uninstall
 
 ```bash
-sudo ./update.sh
-sudo ./uninstall.sh
+git pull --ff-only
+sudo bash ./update.sh
+sudo bash ./uninstall.sh
 ```
+
+`update.sh` reinstalls the currently checked-out repository version. Run `git pull --ff-only` first when you want to update to the latest revision.
 
 See `docs/INSTALLATION.md` and `SECURITY.md` before using this on a production server.
 
