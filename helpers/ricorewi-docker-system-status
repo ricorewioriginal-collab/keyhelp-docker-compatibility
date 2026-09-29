@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+BASE="/var/lib/keyhelp/docker-monitor"
+OUT="$BASE/system.json"
+TMP="$OUT.tmp"
+
+mkdir -p "$BASE"
+
+IMAGES="$(
+    docker image ls \
+        --format '{{json .}}' 2>/dev/null |
+    jq -s '.' || echo '[]'
+)"
+
+VOLUMES="$(
+    {
+        docker volume ls -q 2>/dev/null |
+        while read -r volume; do
+            [ -z "$volume" ] && continue
+
+            docker volume inspect "$volume" 2>/dev/null |
+            jq '.[0] | {
+                name: .Name,
+                driver: .Driver,
+                mountpoint: .Mountpoint,
+                labels: (.Labels // {})
+            }'
+        done
+    } | jq -s '.'
+)"
+
+NETWORKS="$(
+    {
+        docker network ls -q 2>/dev/null |
+        while read -r network; do
+            [ -z "$network" ] && continue
+
+            docker network inspect "$network" 2>/dev/null |
+            jq '.[0] | {
+                id: .Id,
+                name: .Name,
+                driver: .Driver,
+                scope: .Scope,
+                internal: .Internal,
+                ipam: .IPAM,
+                containers: (
+                    (.Containers // {}) |
+                    to_entries |
+                    map({
+                        id: .key,
+                        name: .value.Name,
+                        ipv4: .value.IPv4Address,
+                        ipv6: .value.IPv6Address
+                    })
+                )
+            }'
+        done
+    } | jq -s '.'
+)"
+
+DISK="$(
+    docker system df \
+        --format '{{json .}}' 2>/dev/null |
+    jq -s '.' || echo '[]'
+)"
+
+COMPOSE_VERSION="$(
+    docker compose version --short 2>/dev/null ||
+    echo ""
+)"
+
+DOCKER_VERSION="$(
+    docker version \
+        --format '{{.Server.Version}}' \
+        2>/dev/null ||
+    echo ""
+)"
+
+DOCKER_SERVICE="$(
+    systemctl is-active docker 2>/dev/null ||
+    true
+)"
+
+jq -n \
+    --arg updated "$(date --iso-8601=seconds)" \
+    --arg docker "$DOCKER_VERSION" \
+    --arg compose "$COMPOSE_VERSION" \
+    --arg service "$DOCKER_SERVICE" \
+    --argjson images "$IMAGES" \
+    --argjson volumes "$VOLUMES" \
+    --argjson networks "$NETWORKS" \
+    --argjson disk "$DISK" \
+    '{
+        updated: $updated,
+        docker_version: $docker,
+        compose_version: $compose,
+        docker_service: $service,
+        images: $images,
+        volumes: $volumes,
+        networks: $networks,
+        disk: $disk
+    }' > "$TMP"
+
+mv "$TMP" "$OUT"
+
+chown root:keyhelp "$OUT"
+chmod 0644 "$OUT"

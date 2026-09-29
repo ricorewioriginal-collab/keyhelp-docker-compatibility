@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+OUTDIR="/var/lib/keyhelp/docker-monitor"
+OUTFILE="$OUTDIR/status.json"
+TMPFILE="$OUTFILE.tmp"
+
+mkdir -p "$OUTDIR"
+
+# Container-Grunddaten
+mapfile -t CONTAINERS < <(docker ps -a --format '{{.Names}}' | sort)
+
+# docker stats nur einmal abfragen.
+declare -A CPU MEM_USAGE MEM_PERC NET_IO BLOCK_IO PIDS
+
+while IFS=$'\t' read -r name cpu mem_usage mem_perc net_io block_io pids; do
+    [[ -z "${name:-}" ]] && continue
+
+    CPU["$name"]="$cpu"
+    MEM_USAGE["$name"]="$mem_usage"
+    MEM_PERC["$name"]="$mem_perc"
+    NET_IO["$name"]="$net_io"
+    BLOCK_IO["$name"]="$block_io"
+    PIDS["$name"]="$pids"
+done < <(
+    docker stats --no-stream \
+        --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}' \
+        2>/dev/null || true
+)
+
+# JSON atomar erzeugen
+{
+    printf '{\n'
+    printf '  "updated": %s,\n' "$(date +%s)"
+    printf '  "updated_iso": "%s",\n' "$(date --iso-8601=seconds)"
+    printf '  "host": %s,\n' "$(hostname | jq -R .)"
+    printf '  "docker_version": %s,\n' \
+        "$(docker version --format '{{.Server.Version}}' 2>/dev/null | jq -R .)"
+    printf '  "containers": [\n'
+
+    first=1
+
+    for name in "${CONTAINERS[@]}"; do
+        inspect="$(docker inspect "$name")"
+
+        id="$(jq -r '.[0].Id // ""' <<<"$inspect")"
+        short_id="${id:0:12}"
+
+        image="$(jq -r '.[0].Config.Image // ""' <<<"$inspect")"
+        image_id="$(jq -r '.[0].Image // ""' <<<"$inspect")"
+
+        state="$(jq -r '.[0].State.Status // "unknown"' <<<"$inspect")"
+        started_at="$(jq -r '.[0].State.StartedAt // ""' <<<"$inspect")"
+        finished_at="$(jq -r '.[0].State.FinishedAt // ""' <<<"$inspect")"
+
+        health="$(jq -r '
+            if .[0].State.Health == null then
+                "none"
+            else
+                .[0].State.Health.Status // "none"
+            end
+        ' <<<"$inspect")"
+
+        restart_policy="$(jq -r \
+            '.[0].HostConfig.RestartPolicy.Name // "no"' \
+            <<<"$inspect")"
+
+        created="$(jq -r '.[0].Created // ""' <<<"$inspect")"
+
+        ports="$(jq -c '
+            [
+                .[0].NetworkSettings.Ports
+                | to_entries[]?
+                | .key as $containerPort
+                | if .value == null then
+                    {
+                        container: $containerPort,
+                        host_ip: null,
+                        host_port: null
+                    }
+                  else
+                    .value[] |
+                    {
+                        container: $containerPort,
+                        host_ip: .HostIp,
+                        host_port: .HostPort
+                    }
+                  end
+            ]
+        ' <<<"$inspect")"
+
+        networks="$(jq -c '
+            [
+                .[0].NetworkSettings.Networks
+                | to_entries[]?
+                | {
+                    name: .key,
+                    ip: (.value.IPAddress // ""),
+                    gateway: (.value.Gateway // "")
+                }
+            ]
+        ' <<<"$inspect")"
+
+        mounts="$(jq -c '
+            [
+                .[0].Mounts[]?
+                | {
+                    type: .Type,
+                    name: (.Name // null),
+                    source: .Source,
+                    destination: .Destination,
+                    rw: .RW
+                }
+            ]
+        ' <<<"$inspect")"
+
+        labels="$(jq -c '
+            .[0].Config.Labels // {}
+        ' <<<"$inspect")"
+
+        if [[ $first -eq 0 ]]; then
+            printf ',\n'
+        fi
+        first=0
+
+        jq -n \
+            --arg name "$name" \
+            --arg id "$short_id" \
+            --arg full_id "$id" \
+            --arg image "$image" \
+            --arg image_id "$image_id" \
+            --arg state "$state" \
+            --arg health "$health" \
+            --arg created "$created" \
+            --arg started_at "$started_at" \
+            --arg finished_at "$finished_at" \
+            --arg restart_policy "$restart_policy" \
+            --arg cpu "${CPU[$name]:-}" \
+            --arg mem_usage "${MEM_USAGE[$name]:-}" \
+            --arg mem_percent "${MEM_PERC[$name]:-}" \
+            --arg net_io "${NET_IO[$name]:-}" \
+            --arg block_io "${BLOCK_IO[$name]:-}" \
+            --arg pids "${PIDS[$name]:-}" \
+            --argjson ports "$ports" \
+            --argjson networks "$networks" \
+            --argjson mounts "$mounts" \
+            --argjson labels "$labels" \
+            '{
+                name: $name,
+                id: $id,
+                full_id: $full_id,
+                image: $image,
+                image_id: $image_id,
+                state: $state,
+                health: $health,
+                created: $created,
+                started_at: $started_at,
+                finished_at: $finished_at,
+                restart_policy: $restart_policy,
+
+                stats: {
+                    cpu: (
+                        if $cpu == ""
+                        then null
+                        else $cpu
+                        end
+                    ),
+                    memory_usage: (
+                        if $mem_usage == ""
+                        then null
+                        else $mem_usage
+                        end
+                    ),
+                    memory_percent: (
+                        if $mem_percent == ""
+                        then null
+                        else $mem_percent
+                        end
+                    ),
+                    network_io: (
+                        if $net_io == ""
+                        then null
+                        else $net_io
+                        end
+                    ),
+                    block_io: (
+                        if $block_io == ""
+                        then null
+                        else $block_io
+                        end
+                    ),
+                    pids: (
+                        if $pids == ""
+                        then null
+                        else ($pids | tonumber? // $pids)
+                        end
+                    )
+                },
+
+                ports: $ports,
+                networks: $networks,
+                mounts: $mounts,
+                labels: $labels
+            }'
+    done
+
+    printf '\n  ]\n'
+    printf '}\n'
+
+} > "$TMPFILE"
+
+# Nur gültiges JSON übernehmen
+jq empty "$TMPFILE"
+
+chown root:keyhelp "$TMPFILE"
+chmod 0644 "$TMPFILE"
+
+mv -f "$TMPFILE" "$OUTFILE"
+
+exit 0
+
+# ------------------------------------------------------------
+# Zusätzliche Docker-Manager-Daten
+# ------------------------------------------------------------
+
+EXTRA="/var/lib/keyhelp/docker-monitor/system.json"
+TMP_EXTRA="${EXTRA}.tmp"
+
+IMAGES="$(docker image ls --format '{{json .}}' | jq -s '.' 2>/dev/null || echo '[]')"
+
+VOLUMES="$(
+    docker volume ls -q |
+    while read -r v; do
+        [ -z "$v" ] && continue
+
+        docker volume inspect "$v" |
+        jq '.[0] | {
+            name: .Name,
+            driver: .Driver,
+            mountpoint: .Mountpoint,
+            labels: (.Labels // {})
+        }'
+    done |
+    jq -s '.'
+)"
+
+NETWORKS="$(
+    docker network ls -q |
+    while read -r n; do
+        docker network inspect "$n" |
+        jq '.[0] | {
+            id: .Id,
+            name: .Name,
+            driver: .Driver,
+            scope: .Scope,
+            internal: .Internal,
+            ipam: .IPAM,
+            containers:
+                ((.Containers // {}) |
+                 to_entries |
+                 map({
+                    id: .key,
+                    name: .value.Name,
+                    ipv4: .value.IPv4Address,
+                    ipv6: .value.IPv6Address
+                 }))
+        }'
+    done |
+    jq -s '.'
+)"
+
+DISK="$(docker system df --format '{{json .}}' | jq -s '.' 2>/dev/null || echo '[]')"
+
+COMPOSE_VERSION="$(
+    docker compose version --short 2>/dev/null || echo ""
+)"
+
+DOCKER_SERVICE="$(
+    systemctl is-active docker 2>/dev/null || true
+)"
+
+jq -n \
+    --arg updated "$(date --iso-8601=seconds)" \
+    --arg compose "$COMPOSE_VERSION" \
+    --arg service "$DOCKER_SERVICE" \
+    --argjson images "$IMAGES" \
+    --argjson volumes "$VOLUMES" \
+    --argjson networks "$NETWORKS" \
+    --argjson disk "$DISK" \
+    '{
+        updated: $updated,
+        compose_version: $compose,
+        docker_service: $service,
+        images: $images,
+        volumes: $volumes,
+        networks: $networks,
+        disk: $disk
+    }' > "$TMP_EXTRA"
+
+mv "$TMP_EXTRA" "$EXTRA"
+chmod 0644 "$EXTRA"
+
+# ------------------------------------------------------------
+# Zusätzliche Docker-Manager-Daten
+# ------------------------------------------------------------
+
+EXTRA="/var/lib/keyhelp/docker-monitor/system.json"
+TMP_EXTRA="${EXTRA}.tmp"
+
+IMAGES="$(docker image ls --format '{{json .}}' | jq -s '.' 2>/dev/null || echo '[]')"
+
+VOLUMES="$(
+    docker volume ls -q |
+    while read -r v; do
+        [ -z "$v" ] && continue
+
+        docker volume inspect "$v" |
+        jq '.[0] | {
+            name: .Name,
+            driver: .Driver,
+            mountpoint: .Mountpoint,
+            labels: (.Labels // {})
+        }'
+    done |
+    jq -s '.'
+)"
+
+NETWORKS="$(
+    docker network ls -q |
+    while read -r n; do
+        docker network inspect "$n" |
+        jq '.[0] | {
+            id: .Id,
+            name: .Name,
+            driver: .Driver,
+            scope: .Scope,
+            internal: .Internal,
+            ipam: .IPAM,
+            containers:
+                ((.Containers // {}) |
+                 to_entries |
+                 map({
+                    id: .key,
+                    name: .value.Name,
+                    ipv4: .value.IPv4Address,
+                    ipv6: .value.IPv6Address
+                 }))
+        }'
+    done |
+    jq -s '.'
+)"
+
+DISK="$(docker system df --format '{{json .}}' | jq -s '.' 2>/dev/null || echo '[]')"
+
+COMPOSE_VERSION="$(
+    docker compose version --short 2>/dev/null || echo ""
+)"
+
+DOCKER_SERVICE="$(
+    systemctl is-active docker 2>/dev/null || true
+)"
+
+jq -n \
+    --arg updated "$(date --iso-8601=seconds)" \
+    --arg compose "$COMPOSE_VERSION" \
+    --arg service "$DOCKER_SERVICE" \
+    --argjson images "$IMAGES" \
+    --argjson volumes "$VOLUMES" \
+    --argjson networks "$NETWORKS" \
+    --argjson disk "$DISK" \
+    '{
+        updated: $updated,
+        compose_version: $compose,
+        docker_service: $service,
+        images: $images,
+        volumes: $volumes,
+        networks: $networks,
+        disk: $disk
+    }' > "$TMP_EXTRA"
+
+mv "$TMP_EXTRA" "$EXTRA"
+chmod 0644 "$EXTRA"

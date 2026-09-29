@@ -1,0 +1,7 @@
+[Unit]
+Description=Check Docker image updates
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ricorewi-docker-update-check

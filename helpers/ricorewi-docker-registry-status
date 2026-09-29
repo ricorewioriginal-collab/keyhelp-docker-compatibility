@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+OUT="/var/lib/keyhelp/docker-monitor/registries.json"
+TMP="${OUT}.tmp"
+
+LIST="$(
+ /usr/local/sbin/ricorewi-docker-registry list 2>/dev/null ||
+ echo '[]'
+)"
+
+jq -n \
+ --arg updated "$(date --iso-8601=seconds)" \
+ --argjson registries "$LIST" \
+ '{
+   updated:$updated,
+   registries:$registries
+ }' > "$TMP"
+
+chown root:keyhelp "$TMP"
+chmod 0640 "$TMP"
+mv "$TMP" "$OUT"

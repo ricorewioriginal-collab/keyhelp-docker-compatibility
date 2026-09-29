@@ -1,0 +1,3 @@
+# RicoReWi KeyHelp Docker Manager
+keyhelp ALL=(root) NOPASSWD: /usr/local/sbin/ricorewi-docker-action
+keyhelp ALL=(root) NOPASSWD: /usr/local/sbin/ricorewi-docker-project-action

@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+OUT="/var/lib/keyhelp/docker-monitor/updates.json"
+TMP="${OUT}.tmp"
+
+results='[]'
+
+while IFS= read -r container; do
+
+    [ -n "$container" ] || continue
+
+    image="$(
+        docker inspect \
+            --format '{{.Config.Image}}' \
+            "$container"
+    )"
+
+    old="$(
+        docker image inspect \
+            --format '{{.Id}}' \
+            "$image" 2>/dev/null || true
+    )"
+
+    status="unknown"
+
+    # Lokale, selbst gebaute Images nicht aus Registry ziehen.
+    if [[ "$image" != *"/"* ]] && [[ "$image" == *":latest" ]]; then
+        status="local"
+    else
+        if timeout 45 docker pull "$image" >/tmp/docker-pull.$$ 2>&1; then
+
+            new="$(
+                docker image inspect \
+                    --format '{{.Id}}' \
+                    "$image" 2>/dev/null || true
+            )"
+
+            if [ "$old" = "$new" ]; then
+                status="current"
+            else
+                status="update_available"
+            fi
+        else
+            status="check_failed"
+        fi
+    fi
+
+    item="$(
+        jq -n \
+            --arg container "$container" \
+            --arg image "$image" \
+            --arg status "$status" \
+            '{
+                container:$container,
+                image:$image,
+                status:$status
+            }'
+    )"
+
+    results="$(
+        jq --argjson i "$item" \
+            '. + [$i]' <<<"$results"
+    )"
+
+done < <(docker ps -a --format '{{.Names}}')
+
+rm -f /tmp/docker-pull.$$
+
+jq -n \
+    --arg checked "$(date --iso-8601=seconds)" \
+    --argjson containers "$results" \
+    '{
+        ok:true,
+        checked:$checked,
+        containers:$containers
+    }' >"$TMP"
+
+chmod 0644 "$TMP"
+mv "$TMP" "$OUT"

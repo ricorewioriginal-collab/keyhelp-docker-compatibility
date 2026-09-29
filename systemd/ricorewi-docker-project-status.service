@@ -1,0 +1,8 @@
+[Unit]
+Description=RicoReWi Docker project status for KeyHelp
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ricorewi-docker-project-status

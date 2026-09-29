@@ -1,0 +1,370 @@
+<nav id="sidebar-navigation" class="menu has-margin-x-xsmall" data-location="{{ nav_location }}">
+
+    {# ricorewi-docker-navigation #}
+{% if _app.area == 'admin' %}
+
+<div
+ class="app-menu-group has-margin-bottom-medium"
+ id="ricorewi-docker-navigation">
+
+ <p
+  class="menu-label has-margin-bottom-small"
+  data-group="ricorewi-docker">
+
+  <span class="icon is-medium">
+   <i class="fa-brands fa-docker"></i>
+  </span>
+
+  Docker
+
+  <span
+   class="app-menu-arrow icon is-medium is-pulled-right">
+   <i class="fa-solid fa-angle-down"></i>
+  </span>
+ </p>
+
+ <ul class="menu-list">
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="overview">
+    › Übersicht
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="containers">
+    › Container
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="install">
+    › Installieren
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="projects">
+    › Projekte / Stacks
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="images">
+    › Images
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="volumes">
+    › Volumes
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="networks">
+    › Netzwerke
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="updates">
+    › Updates
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="backups">
+    › Backups
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="registry">
+    › Registry
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="system">
+    › System
+   </a>
+  </li>
+
+  <li>
+   <a href="javascript:void(0)"
+      data-docker-view="help">
+    › Hilfe
+   </a>
+  </li>
+
+ </ul>
+</div>
+
+<script>
+(function(){
+
+ const T='__KEYHELP_DOCKER_TOKEN__';
+
+ const VALID_DOCKER_VIEWS=[
+  'overview',
+  'containers',
+  'install',
+  'projects',
+  'images',
+  'volumes',
+  'networks',
+  'updates',
+  'backups',
+  'registry',
+  'system',
+  'help'
+ ];
+
+ function markDockerNavigation(view){
+
+  document
+   .querySelectorAll(
+    '#ricorewi-docker-navigation a[data-docker-view]'
+   )
+   .forEach(function(link){
+
+    link.classList.toggle(
+     'is-active',
+     link.dataset.dockerView===view
+    );
+
+   });
+ }
+
+
+ function sendDockerState(frame,view){
+
+  if(!frame || !frame.contentWindow){
+   return;
+  }
+
+  frame.contentWindow.postMessage(
+   {
+    type:'keyhelp-docker-auth',
+    token:T
+   },
+   location.origin
+  );
+
+  frame.contentWindow.postMessage(
+   {
+    type:'keyhelp-docker-view',
+    view:view
+   },
+   location.origin
+  );
+ }
+
+
+ function openDocker(view){
+
+  if(!VALID_DOCKER_VIEWS.includes(view)){
+   view='overview';
+  }
+
+  const content=document.getElementById('content');
+
+  if(!content){
+   return;
+  }
+
+  markDockerNavigation(view);
+
+  let shell=
+   document.getElementById('ricorewi-docker-shell');
+
+  if(!shell){
+
+   Array.from(content.children).forEach(function(node){
+
+    if(node.id==='ricorewi-docker-shell'){
+     return;
+    }
+
+    node.dataset.dockerOldDisplay=
+     node.style.display || '';
+
+    node.style.display='none';
+
+   });
+
+   shell=document.createElement('div');
+   shell.id='ricorewi-docker-shell';
+
+   shell.innerHTML=
+    '<div class="content-title">'+
+     '<h1 class="title is-4">'+
+      'Docker Manager'+
+     '</h1>'+
+    '</div>'+
+    '<iframe '+
+     'id="ricorewi-docker-frame" '+
+     'title="Docker Manager" '+
+     'style="'+
+      'display:block;'+
+      'width:100%;'+
+      'height:900px;'+
+      'border:0;'+
+      'background:transparent;'+
+     '">'+
+    '</iframe>';
+
+   content.appendChild(shell);
+
+   const frame=
+    document.getElementById('ricorewi-docker-frame');
+
+   frame.addEventListener('load',function(){
+
+    sendDockerState(frame,view);
+
+   });
+  }
+
+  const frame=
+   document.getElementById('ricorewi-docker-frame');
+
+  const src=
+   '/keyhelp-docker-monitor/manager/#'+view;
+
+  /*
+   * Hash direkt im iframe setzen.
+   * Zusätzlich schicken wir postMessage, damit auch bereits
+   * geladene Manager-Instanzen sofort umschalten.
+   */
+  if(frame.getAttribute('src')!==src){
+
+   frame.setAttribute('src',src);
+
+  }else{
+
+   sendDockerState(frame,view);
+
+  }
+ }
+
+
+ document.addEventListener(
+  'click',
+  function(event){
+
+   const link=event.target.closest(
+    '#ricorewi-docker-navigation '+
+    'a[data-docker-view]'
+   );
+
+   if(!link){
+    return;
+   }
+
+   event.preventDefault();
+   event.stopImmediatePropagation();
+
+   openDocker(
+    link.dataset.dockerView || 'overview'
+   );
+
+  },
+  true
+ );
+
+
+ window.addEventListener(
+  'message',
+  function(event){
+
+   if(
+    event.origin!==location.origin ||
+    !event.data
+   ){
+    return;
+   }
+
+   if(event.data.type==='docker-height'){
+
+    const frame=
+     document.getElementById(
+      'ricorewi-docker-frame'
+     );
+
+    if(frame){
+
+     frame.style.height=
+      Math.max(
+       700,
+       Number(event.data.height || 0)+40
+      )+'px';
+
+    }
+
+    return;
+   }
+
+   if(event.data.type==='docker-view'){
+
+    const view=String(
+     event.data.view || 'overview'
+    );
+
+    if(VALID_DOCKER_VIEWS.includes(view)){
+     markDockerNavigation(view);
+    }
+   }
+
+  }
+ );
+
+})();
+</script>
+
+{% endif %}
+{# /ricorewi-docker-navigation #}
+
+
+    {% for group in navigation %}
+        <div class="app-menu-group has-margin-bottom-medium">
+            <p class="menu-label has-margin-bottom-small {{ group.isCollapsed ? 'app-is-collapsed' }}" data-group="{{ group.id }}">
+                <span class="icon is-medium">
+                    <i class="{{ group.icon }}"></i>
+                </span>
+
+                {{ group.label }}
+
+                <span class="app-menu-arrow icon is-medium is-pulled-right">
+                    <i class="fa-solid fa-angle-{{ group.isCollapsed ? 'right' : 'down' }}"></i>
+                </span>
+            </p>
+            <ul class="menu-list" {{ group.isCollapsed ? 'style="display:none"' }}>
+                {% for button in group.buttons %}
+                    <li>
+                        <a href="{{ button.url }}" {{ button.isNewTab ? 'target="_blank" rel="nofollow noopener noreferrer"' }} {{ button.isActive ? 'class="is-active"' }}>
+                            <small>
+                                <span class="icon is-small">
+                                    <i class="fa-solid fa-angle-right"></i>
+                                </span>
+                            </small>
+                            {{ button.label }}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endfor %}
+</nav>

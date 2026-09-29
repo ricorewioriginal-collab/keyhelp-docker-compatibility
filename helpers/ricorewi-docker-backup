@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+DEST="/var/backups/ricorewi-docker"
+STAMP="$(date +%Y-%m-%d_%H-%M-%S)"
+WORK="$DEST/.backup-$STAMP"
+
+mkdir -p "$DEST" "$WORK"
+
+echo "Docker-Konfiguration sichern ..."
+
+docker ps -a --no-trunc >"$WORK/containers.txt"
+docker images --no-trunc >"$WORK/images.txt"
+docker volume ls >"$WORK/volumes.txt"
+docker network ls >"$WORK/networks.txt"
+docker system df >"$WORK/docker-system-df.txt"
+
+for container in $(docker ps -a --format '{{.Names}}'); do
+    safe="$(echo "$container" | tr '/ ' '__')"
+
+    docker inspect "$container" \
+        >"$WORK/container-${safe}.json"
+done
+
+echo "Named Volumes sichern ..."
+
+mkdir -p "$WORK/volumes"
+
+for volume in $(docker volume ls -q); do
+    echo "  -> $volume"
+
+    docker run --rm \
+        -v "${volume}:/source:ro" \
+        -v "$WORK/volumes:/backup" \
+        alpine:3.20 \
+        sh -c \
+        "cd /source && tar czf '/backup/${volume}.tar.gz' ."
+done
+
+echo "Compose-/Konfigurationsdateien sichern ..."
+
+mkdir -p "$WORK/config"
+
+for path in \
+    /etc/docker
+do
+    if [ -e "$path" ]; then
+        safe="$(echo "$path" | sed 's#^/##;s#/#_#g')"
+
+        tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='data' \
+            -czf "$WORK/config/${safe}.tar.gz" \
+            "$path" 2>/dev/null || true
+    fi
+done
+
+ARCHIVE="$DEST/docker-backup-$STAMP.tar.gz"
+
+tar -C "$WORK" -czf "$ARCHIVE" .
+
+rm -rf "$WORK"
+
+# 14 Tage behalten
+find "$DEST" \
+    -maxdepth 1 \
+    -type f \
+    -name 'docker-backup-*.tar.gz' \
+    -mtime +14 \
+    -delete
+
+/usr/local/sbin/ricorewi-docker-status || true
+
+echo
+echo "Backup fertig:"
+echo "$ARCHIVE"

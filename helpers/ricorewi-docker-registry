@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+CONFIG="/var/lib/keyhelp/docker-registry"
+
+export DOCKER_CONFIG="$CONFIG"
+
+ACTION="${1:-}"
+REGISTRY="${2:-}"
+USERNAME="${3:-}"
+
+valid_registry() {
+    local r="$1"
+
+    [[ -n "$r" ]] || return 1
+    [[ ${#r} -le 253 ]] || return 1
+
+    [[ "$r" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]]
+}
+
+case "$ACTION" in
+
+    login)
+        valid_registry "$REGISTRY" || {
+            echo "Ungültige Registry."
+            exit 2
+        }
+
+        [[ -n "$USERNAME" ]] || {
+            echo "Benutzername fehlt."
+            exit 2
+        }
+
+        [[ ${#USERNAME} -le 200 ]] || {
+            echo "Benutzername zu lang."
+            exit 2
+        }
+
+        # Passwort/PAT ausschließlich von stdin.
+        # Niemals Kommandozeilenargument.
+        exec docker \
+            --config "$CONFIG" \
+            login "$REGISTRY" \
+            --username "$USERNAME" \
+            --password-stdin
+        ;;
+
+    logout)
+        valid_registry "$REGISTRY" || {
+            echo "Ungültige Registry."
+            exit 2
+        }
+
+        docker --config "$CONFIG" logout "$REGISTRY"
+        ;;
+
+    list)
+        python3 - "$CONFIG/config.json" <<'PY'
+import json
+import pathlib
+import sys
+
+p=pathlib.Path(sys.argv[1])
+
+if not p.exists():
+    print("[]")
+    raise SystemExit
+
+try:
+    d=json.loads(p.read_text())
+except Exception:
+    print("[]")
+    raise SystemExit
+
+# WICHTIG:
+# Keine auth-Werte ausgeben.
+out=[]
+
+for registry in sorted((d.get("auths") or {}).keys()):
+    out.append({
+        "registry": registry,
+        "authenticated": True
+    })
+
+print(json.dumps(out,ensure_ascii=False))
+PY
+        ;;
+
+    test)
+        valid_registry "$REGISTRY" || {
+            echo "Ungültige Registry."
+            exit 2
+        }
+
+        # Lokale Credential-Konfiguration prüfen,
+        # ohne Credentials auszugeben.
+        python3 - "$CONFIG/config.json" "$REGISTRY" <<'PY'
+import json
+import pathlib
+import sys
+
+p=pathlib.Path(sys.argv[1])
+registry=sys.argv[2]
+
+if not p.exists():
+    print("Nicht angemeldet.")
+    raise SystemExit(3)
+
+try:
+    data=json.loads(p.read_text())
+except Exception:
+    print("Registry-Konfiguration ist ungültig.")
+    raise SystemExit(4)
+
+auths=data.get("auths") or {}
+
+if registry not in auths:
+    print("Keine Anmeldung für diese Registry vorhanden.")
+    raise SystemExit(3)
+
+print("Registry-Anmeldung ist lokal vorhanden.")
+PY
+        ;;
+
+    *)
+        echo "Unbekannte Registry-Aktion."
+        exit 2
+        ;;
+esac

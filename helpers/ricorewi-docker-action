@@ -1,0 +1,296 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ACTION="${1:-}"
+TARGET="${2:-}"
+
+valid_name() {
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,255}$ ]]
+}
+
+valid_simple() {
+    [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$ ]]
+}
+
+refresh() {
+    /usr/local/sbin/ricorewi-docker-status >/dev/null 2>&1 || true
+}
+
+container_exists() {
+    docker inspect "$1" >/dev/null 2>&1
+}
+
+case "$ACTION" in
+
+    start|stop|restart)
+        valid_simple "$TARGET" || {
+            echo "Ungültiger Containername"
+            exit 2
+        }
+
+        container_exists "$TARGET" || {
+            echo "Container nicht gefunden"
+            exit 3
+        }
+
+        docker "$ACTION" "$TARGET"
+        refresh
+        echo "OK: $ACTION $TARGET"
+        ;;
+
+    logs)
+        valid_simple "$TARGET" || exit 2
+        container_exists "$TARGET" || exit 3
+
+        docker logs \
+            --tail 300 \
+            --timestamps \
+            "$TARGET" 2>&1
+        ;;
+
+    inspect)
+        valid_simple "$TARGET" || exit 2
+        container_exists "$TARGET" || exit 3
+
+        docker inspect "$TARGET"
+        ;;
+
+    remove-container)
+        valid_simple "$TARGET" || exit 2
+        container_exists "$TARGET" || exit 3
+
+        STATE="$(docker inspect -f '{{.State.Running}}' "$TARGET")"
+
+        if [ "$STATE" = "true" ]; then
+            echo "Laufende Container werden nicht gelöscht. Zuerst stoppen."
+            exit 10
+        fi
+
+        docker rm "$TARGET"
+        refresh
+        ;;
+
+    backup)
+        /usr/local/sbin/ricorewi-docker-backup
+        ;;
+
+    update-check)
+        if systemctl is-active --quiet ricorewi-docker-update-check.service; then
+            echo "Update-Prüfung läuft bereits."
+        else
+            systemctl start --no-block ricorewi-docker-update-check.service
+            echo "Update-Prüfung wurde gestartet."
+        fi
+        ;;
+
+    update)
+        valid_simple "$TARGET" || exit 2
+        container_exists "$TARGET" || exit 3
+
+        IMAGE="$(docker inspect --format '{{.Config.Image}}' "$TARGET")"
+
+        PROJECT="$(
+            docker inspect \
+                --format '{{index .Config.Labels "com.docker.compose.project"}}' \
+                "$TARGET" 2>/dev/null || true
+        )"
+
+        WORKDIR="$(
+            docker inspect \
+                --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+                "$TARGET" 2>/dev/null || true
+        )"
+
+        SERVICE="$(
+            docker inspect \
+                --format '{{index .Config.Labels "com.docker.compose.service"}}' \
+                "$TARGET" 2>/dev/null || true
+        )"
+
+        echo "Backup wird erstellt ..."
+        /usr/local/sbin/ricorewi-docker-backup >/dev/null
+
+        echo "Image wird geladen: $IMAGE"
+        docker pull "$IMAGE"
+
+        if [[ -n "$PROJECT" && -n "$WORKDIR" && -n "$SERVICE" && -d "$WORKDIR" ]]; then
+            cd "$WORKDIR"
+
+            echo "Compose-Service wird neu erstellt: $SERVICE"
+
+            docker compose up \
+                -d \
+                --no-deps \
+                --force-recreate \
+                "$SERVICE"
+
+            echo "Update abgeschlossen."
+        else
+            echo
+            echo "Image aktualisiert."
+            echo "Container wurde NICHT automatisch neu erstellt,"
+            echo "weil keine vollständigen Compose-Metadaten vorhanden sind."
+        fi
+
+        refresh
+        ;;
+
+    pull-image)
+        valid_name "$TARGET" || {
+            echo "Ungültiger Image-Name"
+            exit 2
+        }
+
+        docker pull "$TARGET"
+        refresh
+        ;;
+
+    remove-image)
+        valid_name "$TARGET" || exit 2
+
+        USED="$(
+            docker ps -a \
+                --filter "ancestor=$TARGET" \
+                --format '{{.ID}}' |
+            head -n1
+        )"
+
+        if [ -n "$USED" ]; then
+            echo "Image wird noch von mindestens einem Container verwendet."
+            exit 11
+        fi
+
+        docker image rm "$TARGET"
+        refresh
+        ;;
+
+    # RICOREWI_VOLUME_ACTIONS_5C3D
+
+    volume-list)
+        docker volume ls --format '{{json .}}'
+        ;;
+
+    volume-inspect)
+        valid_simple "$TARGET" || exit 2
+        docker volume inspect "$TARGET"
+        ;;
+
+    volume-create)
+        valid_simple "$TARGET" || exit 2
+
+        if docker volume inspect "$TARGET" >/dev/null 2>&1; then
+            echo "Volume existiert bereits: $TARGET"
+            exit 13
+        fi
+
+        docker volume create "$TARGET"
+        refresh
+        ;;
+
+    remove-volume)
+        valid_simple "$TARGET" || exit 2
+
+        USED="$(
+            docker ps -a \
+                --filter "volume=$TARGET" \
+                --format '{{.ID}}' |
+            head -n1
+        )"
+
+        if [ -n "$USED" ]; then
+            echo "Volume wird noch von mindestens einem Container verwendet."
+            exit 12
+        fi
+
+        docker volume rm "$TARGET"
+        refresh
+        ;;
+
+    prune-images)
+        docker image prune -f
+        refresh
+        ;;
+
+    prune-build-cache)
+        docker builder prune -f
+        refresh
+        ;;
+
+    docker-version)
+        echo "Docker Engine:"
+        docker version --format \
+            'Server {{.Server.Version}} / API {{.Server.APIVersion}}'
+
+        echo
+        echo "Docker Compose:"
+        docker compose version
+
+        echo
+        echo "Docker Dienst:"
+        systemctl is-active docker
+
+        echo
+        echo "Speicher:"
+        docker system df
+        ;;
+
+    install-engine)
+        if command -v docker >/dev/null 2>&1; then
+            echo "Docker ist bereits installiert:"
+            docker --version
+            docker compose version || true
+            exit 0
+        fi
+
+        . /etc/os-release
+
+        [[ "${ID:-}" == ubuntu || "${ID:-}" == debian ]] || {
+            echo "Nur Debian/Ubuntu unterstützt."
+            exit 4
+        }
+
+        apt-get update
+
+        DEBIAN_FRONTEND=noninteractive \
+            apt-get install -y \
+            ca-certificates \
+            curl \
+            gnupg
+
+        install -m 0755 -d /etc/apt/keyrings
+
+        curl -fsSL \
+            "https://download.docker.com/linux/$ID/gpg" \
+            -o /etc/apt/keyrings/docker.asc
+
+        chmod a+r /etc/apt/keyrings/docker.asc
+
+        ARCH="$(dpkg --print-architecture)"
+        CODENAME="${VERSION_CODENAME:?}"
+
+        echo \
+"deb [arch=$ARCH signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$ID $CODENAME stable" \
+            > /etc/apt/sources.list.d/docker.list
+
+        apt-get update
+
+        DEBIAN_FRONTEND=noninteractive \
+            apt-get install -y \
+            docker-ce \
+            docker-ce-cli \
+            containerd.io \
+            docker-buildx-plugin \
+            docker-compose-plugin
+
+        systemctl enable --now docker
+
+        echo "Docker installiert:"
+        docker --version
+        docker compose version
+        ;;
+
+    *)
+        echo "Nicht erlaubte Aktion"
+        exit 64
+        ;;
+esac

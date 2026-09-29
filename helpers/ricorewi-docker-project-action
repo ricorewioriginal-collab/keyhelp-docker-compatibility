@@ -1,0 +1,835 @@
+#!/usr/bin/env python3
+
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
+
+
+BASE = Path("/opt/docker")
+BASE.mkdir(parents=True, exist_ok=True)
+
+
+def fail(msg, code=1):
+    print(msg, file=sys.stderr)
+    raise SystemExit(code)
+
+
+def run(cmd, cwd=None, timeout=900):
+    print("$ " + " ".join(shlex.quote(str(x)) for x in cmd))
+    print()
+
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        fail("Zeitüberschreitung bei der Ausführung.", 124)
+
+    if p.stdout:
+        print(p.stdout.rstrip())
+
+    if p.returncode != 0:
+        raise SystemExit(p.returncode)
+
+
+def safe_name(value):
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", value))
+
+
+def safe_ref(value):
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}", value))
+
+
+def safe_repo(url):
+    try:
+        u = urlparse(url)
+    except Exception:
+        return False
+
+    if u.scheme != "https":
+        return False
+
+    if not u.hostname:
+        return False
+
+    # Kein Benutzername/Passwort in Repository-URL.
+    if u.username or u.password:
+        return False
+
+    # Absichtlich HTTPS-Git erlauben.
+    # Keine file://, ssh:// oder lokalen Pfade.
+    return url.endswith(".git") or "/" in u.path.strip("/")
+
+
+def safe_project_path(value):
+    try:
+        p = Path(value).resolve()
+        base = BASE.resolve()
+        p.relative_to(base)
+    except Exception:
+        return None
+
+    if p == base:
+        return None
+
+    return p
+
+
+def compose_file(path):
+    candidates = (
+        "compose.yaml",
+        "compose.yml",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    )
+
+    for filename in candidates:
+        f = path / filename
+        if f.is_file():
+            return f
+
+    return None
+
+
+def refresh():
+    subprocess.run(
+        ["/usr/local/sbin/ricorewi-docker-status"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+    # system.json ebenfalls aktualisieren, falls vorhanden.
+    helper = Path("/usr/local/sbin/ricorewi-docker-system-status")
+    if helper.exists():
+        subprocess.run(
+            [str(helper)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+
+def install_git(data):
+    url = str(data.get("url", "")).strip()
+    ref = str(data.get("ref", "main")).strip() or "main"
+    name = str(data.get("name", "")).strip()
+
+    if not safe_repo(url):
+        fail("Ungültige Repository-Adresse.")
+
+    if not safe_ref(ref):
+        fail("Ungültiger Branch oder Tag.")
+
+    if not name:
+        name = Path(urlparse(url).path).name
+        if name.endswith(".git"):
+            name = name[:-4]
+
+    if not safe_name(name):
+        fail("Ungültiger Projektname.")
+
+    target = (BASE / name).resolve()
+
+    try:
+        target.relative_to(BASE.resolve())
+    except Exception:
+        fail("Ungültiges Zielverzeichnis.")
+
+    if target.exists():
+        fail(
+            f"Projektverzeichnis existiert bereits:\n{target}\n\n"
+            "Bestehende Projekte werden nicht automatisch überschrieben."
+        )
+
+    print(f"Repository: {url}")
+    print(f"Branch/Tag: {ref}")
+    print(f"Projekt: {name}")
+    print(f"Ziel: {target}")
+    print()
+
+    run([
+        "git",
+        "clone",
+        "--depth", "1",
+        "--branch", ref,
+        "--",
+        url,
+        str(target)
+    ], timeout=600)
+
+    compose = compose_file(target)
+
+    if compose is None:
+        print()
+        print("Repository wurde erfolgreich geklont.")
+        print("Es wurde jedoch keine Compose-Datei gefunden.")
+        print("Das Projekt wurde deshalb NICHT automatisch gestartet.")
+        return
+
+    print()
+    print(f"Compose-Datei gefunden: {compose.name}")
+    print()
+
+    # Erst vollständig validieren.
+    run(
+        ["docker", "compose", "-f", compose.name, "config", "--quiet"],
+        cwd=target,
+        timeout=120
+    )
+
+    print()
+    print("Compose-Konfiguration ist gültig.")
+    print("Images werden geladen/gebaut ...")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "pull"],
+        cwd=target,
+        timeout=1200
+    )
+
+    print()
+    print("Compose-Projekt wird gebaut ...")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "build"],
+        cwd=target,
+        timeout=1800
+    )
+
+    print()
+    print("Compose-Projekt wird gestartet ...")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "up", "-d"],
+        cwd=target,
+        timeout=900
+    )
+
+    refresh()
+
+    print()
+    print("Git-/Compose-Installation abgeschlossen.")
+
+
+def compose_up(data):
+    raw = str(data.get("path", "")).strip()
+
+    path = safe_project_path(raw)
+
+    if path is None:
+        fail(
+            "Ungültiges Projektverzeichnis.\n"
+            "Erlaubt sind ausschließlich Projekte unter /opt/docker/."
+        )
+
+    if not path.is_dir():
+        fail("Projektverzeichnis wurde nicht gefunden.")
+
+    compose = compose_file(path)
+
+    if compose is None:
+        fail(
+            "Keine compose.yaml, compose.yml, "
+            "docker-compose.yml oder docker-compose.yaml gefunden."
+        )
+
+    print(f"Projekt: {path}")
+    print(f"Compose: {compose.name}")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "config", "--quiet"],
+        cwd=path,
+        timeout=120
+    )
+
+    print()
+    print("Konfiguration gültig.")
+    print("Images werden geladen ...")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "pull"],
+        cwd=path,
+        timeout=1200
+    )
+
+    print()
+    print("Projekt wird gebaut ...")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "build"],
+        cwd=path,
+        timeout=1800
+    )
+
+    print()
+    print("Projekt wird gestartet ...")
+    print()
+
+    run(
+        ["docker", "compose", "-f", compose.name, "up", "-d"],
+        cwd=path,
+        timeout=900
+    )
+
+    refresh()
+
+    print()
+    print("Compose-Projekt erfolgreich gestartet.")
+
+
+def docker_run(data):
+    raw = str(data.get("command", "")).strip()
+
+    if not raw:
+        fail("Docker-Befehl fehlt.")
+
+    if len(raw) > 4096:
+        fail("Docker-Befehl ist zu lang.")
+
+    try:
+        args = shlex.split(raw)
+    except ValueError as exc:
+        fail(f"Ungültige Befehlszeile: {exc}")
+
+    if len(args) < 3:
+        fail("Unvollständiger Docker-Befehl.")
+
+    if args[0] != "docker" or args[1] != "run":
+        fail("Nur 'docker run' ist erlaubt.")
+
+    # Gefährliche Optionen im Webmanager nicht zulassen.
+    blocked_exact = {
+        "--privileged",
+        "--pid=host",
+        "--ipc=host",
+        "--uts=host",
+        "--cgroupns=host",
+    }
+
+    blocked_prefixes = (
+        "--device=",
+        "--security-opt=",
+        "--cap-add=",
+        "--pid=",
+        "--ipc=",
+        "--uts=",
+        "--cgroupns=",
+    )
+
+    for arg in args[2:]:
+        if arg in blocked_exact:
+            fail(f"Option im Webmanager nicht erlaubt: {arg}")
+
+        if any(arg.startswith(x) for x in blocked_prefixes):
+            fail(f"Option im Webmanager nicht erlaubt: {arg}")
+
+    # Host-Netzwerk verhindern.
+    for i, arg in enumerate(args):
+        if arg in ("--network=host", "--net=host"):
+            fail("Host-Netzwerk ist im Webmanager nicht erlaubt.")
+
+        if arg in ("--network", "--net"):
+            if i + 1 < len(args) and args[i + 1] == "host":
+                fail("Host-Netzwerk ist im Webmanager nicht erlaubt.")
+
+    # Bind-Mounts auf kritische Hostbereiche verhindern.
+    forbidden_mounts = (
+        "/",
+        "/etc",
+        "/root",
+        "/boot",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/run",
+        "/var/run",
+        "/var/lib/docker",
+        "/home/keyhelp",
+    )
+
+    def check_mount(value):
+        source = value.split(":", 1)[0]
+
+        if not source.startswith("/"):
+            return
+
+        try:
+            resolved = str(Path(source).resolve())
+        except Exception:
+            fail("Ungültiger Bind-Mount.")
+
+        for bad in forbidden_mounts:
+            if resolved == bad or resolved.startswith(bad.rstrip("/") + "/"):
+                fail(
+                    "Dieser Host-Mount ist im Webmanager nicht erlaubt:\n"
+                    + source
+                )
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+
+        if arg in ("-v", "--volume"):
+            if i + 1 >= len(args):
+                fail("Volume-Angabe unvollständig.")
+
+            check_mount(args[i + 1])
+            i += 2
+            continue
+
+        if arg.startswith("--volume="):
+            check_mount(arg.split("=", 1)[1])
+
+        i += 1
+
+    print("Validierter Docker-Befehl:")
+    print(" ".join(shlex.quote(x) for x in args))
+    print()
+
+    run(args, timeout=900)
+
+    refresh()
+
+    print()
+    print("Container wurde erstellt.")
+
+
+
+def project_from_data(data):
+    raw = str(data.get("path", "")).strip()
+
+    path = safe_project_path(raw)
+
+    if path is None:
+        fail(
+            "Ungültiges Projektverzeichnis.\n"
+            "Erlaubt sind ausschließlich Projekte unter /opt/docker/."
+        )
+
+    if not path.is_dir():
+        fail("Projektverzeichnis wurde nicht gefunden.")
+
+    compose = compose_file(path)
+
+    if compose is None:
+        fail("Keine Docker-Compose-Datei gefunden.")
+
+    return path, compose
+
+
+def project_refresh():
+    refresh()
+
+    helper = Path(
+        "/usr/local/sbin/ricorewi-docker-project-status"
+    )
+
+    if helper.exists():
+        subprocess.run(
+            [str(helper)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+
+def project_start(data):
+    path, compose = project_from_data(data)
+
+    run(
+        ["docker", "compose", "-f", compose.name, "up", "-d"],
+        cwd=path,
+        timeout=900
+    )
+
+    project_refresh()
+
+    print()
+    print("Projekt gestartet.")
+
+
+def project_stop(data):
+    path, compose = project_from_data(data)
+
+    run(
+        ["docker", "compose", "-f", compose.name, "stop"],
+        cwd=path,
+        timeout=300
+    )
+
+    project_refresh()
+
+    print()
+    print("Projekt gestoppt.")
+
+
+def project_restart(data):
+    path, compose = project_from_data(data)
+
+    run(
+        ["docker", "compose", "-f", compose.name, "restart"],
+        cwd=path,
+        timeout=600
+    )
+
+    project_refresh()
+
+    print()
+    print("Projekt neu gestartet.")
+
+
+def project_pull(data):
+    path, compose = project_from_data(data)
+
+    run(
+        ["docker", "compose", "-f", compose.name, "pull"],
+        cwd=path,
+        timeout=1800
+    )
+
+    project_refresh()
+
+    print()
+    print("Images wurden aktualisiert.")
+
+
+def project_build(data):
+    path, compose = project_from_data(data)
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "build",
+            "--pull",
+        ],
+        cwd=path,
+        timeout=2400
+    )
+
+    project_refresh()
+
+    print()
+    print("Projekt-Build abgeschlossen.")
+
+
+def project_deploy(data):
+    path, compose = project_from_data(data)
+
+    print("Compose-Konfiguration prüfen ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "config",
+            "--quiet",
+        ],
+        cwd=path,
+        timeout=120
+    )
+
+    print()
+    print("Images aktualisieren ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "pull",
+        ],
+        cwd=path,
+        timeout=1800
+    )
+
+    print()
+    print("Images bauen ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "build",
+            "--pull",
+        ],
+        cwd=path,
+        timeout=2400
+    )
+
+    print()
+    print("Stack anwenden ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "up",
+            "-d",
+            "--remove-orphans",
+        ],
+        cwd=path,
+        timeout=1200
+    )
+
+    project_refresh()
+
+    print()
+    print("Deploy erfolgreich abgeschlossen.")
+
+
+def project_git_deploy(data):
+    path, compose = project_from_data(data)
+
+    if not (path / ".git").exists():
+        fail("Dieses Projekt ist kein Git-Repository.")
+
+    rc = subprocess.run(
+        [
+            "git",
+            "status",
+            "--porcelain",
+        ],
+        cwd=str(path),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    if rc.returncode != 0:
+        fail(rc.stderr or "Git-Status konnte nicht gelesen werden.")
+
+    if rc.stdout.strip():
+        fail(
+            "Das Repository enthält lokale Änderungen.\n\n"
+            "Git Pull wurde aus Sicherheitsgründen abgebrochen."
+        )
+
+    print("Git Repository aktualisieren ...")
+    print()
+
+    run(
+        ["git", "pull", "--ff-only"],
+        cwd=path,
+        timeout=600
+    )
+
+    print()
+    print("Compose-Konfiguration prüfen ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "config",
+            "--quiet",
+        ],
+        cwd=path,
+        timeout=120
+    )
+
+    print()
+    print("Images aktualisieren ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "pull",
+        ],
+        cwd=path,
+        timeout=1800
+    )
+
+    print()
+    print("Images bauen ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "build",
+            "--pull",
+        ],
+        cwd=path,
+        timeout=2400
+    )
+
+    print()
+    print("Stack anwenden ...")
+    print()
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "up",
+            "-d",
+            "--remove-orphans",
+        ],
+        cwd=path,
+        timeout=1200
+    )
+
+    project_refresh()
+
+    print()
+    print("Git Pull + Deploy erfolgreich abgeschlossen.")
+
+
+def project_logs(data):
+    path, compose = project_from_data(data)
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "logs",
+            "--tail",
+            "250",
+            "--no-color",
+        ],
+        cwd=path,
+        timeout=60
+    )
+
+
+def project_config(data):
+    path, compose = project_from_data(data)
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "config",
+        ],
+        cwd=path,
+        timeout=120
+    )
+
+
+def project_down(data):
+    path, compose = project_from_data(data)
+
+    run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            compose.name,
+            "down",
+        ],
+        cwd=path,
+        timeout=600
+    )
+
+    project_refresh()
+
+    print()
+    print(
+        "Stack wurde heruntergefahren. "
+        "Volumes und Projektdateien wurden NICHT gelöscht."
+    )
+
+
+def main():
+    if len(sys.argv) != 2:
+        fail("Interner Aufruf ungültig.")
+
+    action = sys.argv[1]
+
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        fail("Ungültige Eingabedaten.")
+
+    if not isinstance(data, dict):
+        fail("Ungültige Eingabedaten.")
+
+    if action == "install-git":
+        install_git(data)
+
+    elif action == "compose-up":
+        compose_up(data)
+
+    elif action == "docker-run":
+        docker_run(data)
+
+    elif action == "project-start":
+        project_start(data)
+
+    elif action == "project-stop":
+        project_stop(data)
+
+    elif action == "project-restart":
+        project_restart(data)
+
+    elif action == "project-pull":
+        project_pull(data)
+
+    elif action == "project-build":
+        project_build(data)
+
+    elif action == "project-deploy":
+        project_deploy(data)
+
+    elif action == "project-git-deploy":
+        project_git_deploy(data)
+
+    elif action == "project-logs":
+        project_logs(data)
+
+    elif action == "project-config":
+        project_config(data)
+
+    elif action == "project-down":
+        project_down(data)
+
+    else:
+        fail("Aktion nicht unterstützt.")
+
+
+if __name__ == "__main__":
+    main()

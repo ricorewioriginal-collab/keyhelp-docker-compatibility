@@ -1,0 +1,2 @@
+# KeyHelp Docker Registry Manager
+keyhelp ALL=(root) NOPASSWD: /usr/local/sbin/ricorewi-docker-registry

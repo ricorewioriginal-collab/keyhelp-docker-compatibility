@@ -1,0 +1,4083 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker Manager</title>
+
+<style>
+:root{
+ --card:#fff;
+ --soft:#f5f7fa;
+ --text:#222;
+ --muted:#6b7280;
+ --line:#e5e7eb;
+ --blue:#3273dc;
+ --green:#22a06b;
+ --red:#d64545;
+ --orange:#d98b19
+}
+
+@media(prefers-color-scheme:dark){
+ :root{
+  --card:#22252a;
+  --soft:#292d33;
+  --text:#f3f4f6;
+  --muted:#a6adb7;
+  --line:#3b4048
+ }
+}
+
+*{box-sizing:border-box}
+
+html,body{
+ background:transparent!important;
+}
+
+body{
+ margin:0;
+ color:var(--text);
+ font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+.tabs{
+ display:flex;
+ gap:6px;
+ flex-wrap:wrap;
+ margin-bottom:16px;
+}
+
+.tabs button,.btn{
+ border:1px solid var(--line);
+ background:var(--card);
+ color:var(--text);
+ border-radius:5px;
+ padding:8px 12px;
+ cursor:pointer;
+}
+
+.tabs button.active,.btn.primary{
+ background:var(--blue);
+ border-color:var(--blue);
+ color:white;
+}
+
+.btn.danger{
+ background:var(--red);
+ border-color:var(--red);
+ color:#fff;
+}
+
+.btn.warn{
+ background:var(--orange);
+ border-color:var(--orange);
+ color:#fff;
+}
+
+.grid{
+ display:grid;
+ grid-template-columns:repeat(4,minmax(0,1fr));
+ gap:12px;
+ margin-bottom:14px;
+}
+
+.card{
+ background:var(--card);
+ border:1px solid var(--line);
+ border-radius:6px;
+ padding:15px;
+ margin-bottom:12px;
+}
+
+.metric{
+ font-size:24px;
+ font-weight:700;
+}
+
+.muted{color:var(--muted)}
+.good{color:var(--green)}
+.bad{color:var(--red)}
+
+.view{display:none}
+.view.active{display:block}
+
+.item{
+ border-top:1px solid var(--line);
+ padding:12px 0;
+}
+
+.item:first-child{border-top:0}
+
+.head{
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ gap:12px;
+}
+
+.name{
+ font-weight:600;
+ font-size:15px;
+}
+
+.badge{
+ display:inline-block;
+ background:var(--soft);
+ padding:3px 8px;
+ border-radius:999px;
+ font-size:12px;
+}
+
+.actions{
+ display:flex;
+ flex-wrap:wrap;
+ gap:6px;
+ margin-top:10px;
+}
+
+.details{
+ display:none;
+ background:var(--soft);
+ padding:12px;
+ border-radius:5px;
+ margin-top:10px;
+ line-height:1.65;
+}
+
+.details.open{display:block}
+
+.search{
+ width:100%;
+ border:1px solid var(--line);
+ background:var(--card);
+ color:var(--text);
+ border-radius:5px;
+ padding:9px;
+ margin-bottom:10px;
+}
+
+.notice{
+ border:1px solid var(--line);
+ padding:12px;
+ border-radius:5px;
+ margin-bottom:12px;
+ white-space:pre-wrap;
+}
+
+.log{
+ white-space:pre-wrap;
+ background:#111;
+ color:#eee;
+ padding:14px;
+ border-radius:5px;
+ max-height:500px;
+ overflow:auto;
+}
+
+table{
+ width:100%;
+ border-collapse:collapse;
+}
+
+td,th{
+ padding:8px;
+ text-align:left;
+ border-bottom:1px solid var(--line);
+}
+
+@media(max-width:800px){
+ .grid{grid-template-columns:repeat(2,1fr)}
+ .head{align-items:flex-start}
+}
+
+@media(max-width:500px){
+ .grid{grid-template-columns:1fr}
+}
+
+
+/* RICOREWI_VOLUME_CSS_5C3D */
+
+.volume-summary{
+ display:grid;
+ grid-template-columns:repeat(
+  3,
+  minmax(0,1fr)
+ );
+ gap:12px;
+ margin-top:16px;
+}
+
+.volume-summary>div{
+ border:1px solid rgba(127,127,127,.2);
+ border-radius:8px;
+ padding:12px;
+}
+
+.volume-summary b{
+ display:block;
+ font-size:20px;
+}
+
+.volume-summary span{
+ font-size:12px;
+ opacity:.7;
+}
+
+.volume-card{
+ margin-top:12px;
+}
+
+.volume-detail{
+ margin-top:14px;
+ font-size:13px;
+}
+
+.volume-detail code{
+ word-break:break-all;
+}
+
+.volume-users{
+ margin-top:7px;
+}
+
+.volume-users>div{
+ padding:4px 0;
+}
+
+@media(max-width:700px){
+
+ .volume-summary{
+  grid-template-columns:1fr;
+ }
+
+}
+
+
+</style>
+
+<style id="docker-manager-modal-css">
+.docker-modal{
+ position:fixed;
+ inset:0;
+ z-index:100000;
+ background:rgba(0,0,0,.48);
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ padding:24px;
+}
+
+.docker-modal-box{
+ width:min(1000px,96vw);
+ max-height:88vh;
+ display:flex;
+ flex-direction:column;
+ background:var(--card);
+ color:var(--text);
+ border:1px solid var(--line);
+ border-radius:10px;
+ box-shadow:0 18px 60px rgba(0,0,0,.35);
+ overflow:hidden;
+}
+
+.docker-modal-head{
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:16px;
+ padding:14px 18px;
+ border-bottom:1px solid var(--line);
+}
+
+.docker-modal-title{
+ font-size:16px;
+ font-weight:700;
+}
+
+.docker-modal-close{
+ border:0;
+ background:transparent;
+ color:var(--text);
+ font-size:25px;
+ cursor:pointer;
+ line-height:1;
+}
+
+.docker-modal-body{
+ padding:18px;
+ overflow:auto;
+}
+
+.docker-modal-output{
+ margin:0;
+ white-space:pre-wrap;
+ overflow-wrap:anywhere;
+ font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+ font-size:12px;
+ line-height:1.5;
+}
+
+.docker-modal-ok{
+ border-left:4px solid #48c78e;
+}
+
+.docker-modal-error{
+ border-left:4px solid #f14668;
+}
+
+.docker-modal-actions{
+ display:flex;
+ justify-content:flex-end;
+ gap:8px;
+ padding:12px 18px;
+ border-top:1px solid var(--line);
+}
+</style>
+
+
+<style id="ricorewi-final-ui">
+
+body{
+ padding:2px;
+}
+
+.tabs{
+ position:sticky;
+ top:0;
+ z-index:20;
+ background:var(--card);
+ padding:10px;
+ margin:-2px -2px 16px;
+ border-bottom:1px solid var(--line);
+}
+
+.tabs button,
+.btn{
+ transition:
+  background .15s,
+  border-color .15s,
+  transform .15s,
+  opacity .15s;
+}
+
+.tabs button:hover,
+.btn:hover{
+ filter:brightness(.97);
+}
+
+.tabs button:active,
+.btn:active{
+ transform:translateY(1px);
+}
+
+.btn:disabled{
+ opacity:.5;
+ cursor:wait;
+}
+
+.card{
+ box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+
+.help-grid{
+ display:grid;
+ grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:12px;
+}
+
+.help-grid .card{
+ margin-bottom:0;
+}
+
+.help-grid h3{
+ margin-top:0;
+}
+
+.help-warning{
+ border-left:4px solid var(--orange);
+}
+
+.help-danger{
+ border-left:4px solid var(--red);
+}
+
+.help-good{
+ border-left:4px solid var(--green);
+}
+
+.busy-overlay{
+ position:fixed;
+ inset:0;
+ z-index:99999;
+ background:rgba(0,0,0,.16);
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ backdrop-filter:blur(1px);
+}
+
+.busy-box{
+ background:var(--card);
+ color:var(--text);
+ border:1px solid var(--line);
+ border-radius:7px;
+ padding:16px 22px;
+ box-shadow:0 6px 30px rgba(0,0,0,.20);
+ font-weight:600;
+}
+
+@media(max-width:800px){
+ .help-grid{
+  grid-template-columns:1fr;
+ }
+}
+
+</style>
+
+
+<style id="ricorewi-registry-ui">
+#registry{
+ padding-bottom:40px;
+}
+
+.registry-head,
+.registry-list-head,
+.registry-entry{
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:16px;
+}
+
+.registry-head{
+ margin-bottom:18px;
+}
+
+.registry-head h2{
+ margin:0 0 4px;
+}
+
+.registry-form{
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:14px;
+ margin-top:18px;
+}
+
+.registry-form label{
+ display:flex;
+ flex-direction:column;
+ gap:7px;
+ font-size:13px;
+ font-weight:600;
+}
+
+.registry-form input{
+ width:100%;
+ box-sizing:border-box;
+ padding:10px 12px;
+ border:1px solid rgba(127,127,127,.35);
+ border-radius:7px;
+ background:var(--card,#fff);
+ color:inherit;
+}
+
+.registry-login-actions{
+ margin-top:16px;
+}
+
+.registry-entry{
+ padding:13px 0;
+ border-bottom:1px solid rgba(127,127,127,.18);
+}
+
+.registry-entry:last-child{
+ border-bottom:0;
+}
+
+.registry-count{
+ min-width:34px;
+ padding:5px 9px;
+ text-align:center;
+ border-radius:999px;
+ background:rgba(127,127,127,.14);
+ font-weight:700;
+}
+
+.registry-empty{
+ padding:18px 0;
+ opacity:.7;
+}
+
+.registry-busy{
+ margin-bottom:14px;
+ padding:12px 14px;
+ border-radius:7px;
+ background:rgba(70,130,180,.12);
+}
+
+.registry-message{
+ margin-bottom:14px;
+ padding:13px 15px;
+ border-radius:7px;
+ background:rgba(127,127,127,.12);
+}
+
+.registry-message.success{
+ background:rgba(30,160,90,.12);
+}
+
+.registry-message.error{
+ background:rgba(200,60,60,.12);
+}
+
+.registry-message-title{
+ font-weight:700;
+ margin-bottom:6px;
+}
+
+.registry-message pre{
+ margin:0;
+ white-space:pre-wrap;
+ overflow-wrap:anywhere;
+ font-family:inherit;
+ font-size:13px;
+}
+
+.registry-help p{
+ margin:.65em 0;
+}
+
+.registry-intro{
+ margin-top:4px;
+}
+
+@media(max-width:900px){
+ .registry-form{
+  grid-template-columns:1fr;
+ }
+
+ .registry-entry{
+  align-items:flex-start;
+  flex-direction:column;
+ }
+}
+</style>
+
+
+<style id="ricorewi-network-ui">
+/* RICOREWI_NETWORK_CSS_5C3CB */
+
+.network-form{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+ gap:14px;
+ margin-top:16px;
+ margin-bottom:14px;
+}
+
+.network-form label{
+ display:flex;
+ flex-direction:column;
+ gap:6px;
+}
+
+.network-form label > span{
+ font-weight:600;
+}
+
+.network-form .input,
+.network-connect-row .input{
+ width:100%;
+ min-height:40px;
+ border:1px solid rgba(127,127,127,.35);
+ border-radius:6px;
+ padding:8px 10px;
+ background:var(--docker-input-bg,#fff);
+ color:inherit;
+}
+
+.network-check{
+ display:flex;
+ align-items:center;
+ gap:8px;
+ margin:10px 0 14px;
+}
+
+.network-summary{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+ gap:10px;
+ margin:14px 0;
+}
+
+.network-summary > div{
+ padding:10px;
+ border:1px solid rgba(127,127,127,.20);
+ border-radius:6px;
+}
+
+.network-connect-row{
+ display:grid;
+ grid-template-columns:minmax(220px,1fr) auto;
+ gap:10px;
+ align-items:center;
+ margin-top:10px;
+}
+
+.mono{
+ font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,
+  Consolas,"Liberation Mono","Courier New",monospace;
+ word-break:break-all;
+}
+
+#docker-output-modal .busy-box{
+ background:var(--docker-modal-bg,#fff);
+ color:inherit;
+}
+
+#docker-output-modal pre{
+ border:1px solid rgba(127,127,127,.25);
+ border-radius:6px;
+ padding:12px;
+}
+
+@media(max-width:700px){
+ .network-connect-row{
+  grid-template-columns:1fr;
+ }
+}
+</style>
+
+
+<style id="ricorewi-port-endpoints-css">
+
+.endpoint-summary{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+ gap:10px;
+ margin-top:16px;
+}
+
+.endpoint-summary > div{
+ border:1px solid rgba(127,127,127,.2);
+ border-radius:8px;
+ padding:12px;
+ text-align:center;
+}
+
+.endpoint-summary b{
+ display:block;
+ font-size:20px;
+}
+
+.endpoint-summary span{
+ display:block;
+ margin-top:3px;
+ font-size:12px;
+ opacity:.7;
+}
+
+.endpoint-card h4{
+ margin-top:18px;
+ margin-bottom:8px;
+}
+
+.endpoint-table-wrap{
+ overflow-x:auto;
+}
+
+.endpoint-table{
+ width:100%;
+ border-collapse:collapse;
+ font-size:13px;
+}
+
+.endpoint-table th,
+.endpoint-table td{
+ padding:8px 10px;
+ text-align:left;
+ border-bottom:1px solid rgba(127,127,127,.15);
+ white-space:nowrap;
+}
+
+.endpoint-table th{
+ font-size:12px;
+ opacity:.7;
+}
+
+.port-state{
+ display:inline-block;
+ border-radius:999px;
+ padding:3px 8px;
+ font-size:11px;
+ font-weight:600;
+}
+
+.port-public{
+ background:rgba(220,60,60,.14);
+}
+
+.port-local{
+ background:rgba(60,130,220,.14);
+}
+
+.port-internal{
+ background:rgba(120,120,120,.14);
+}
+
+.port-bound{
+ background:rgba(220,160,40,.14);
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="tabs">
+ <button data-v="overview">Übersicht</button>
+ <button data-v="containers">Container</button>
+ <button data-v="install">Installieren</button>
+ <button data-v="projects">Projekte / Stacks</button>
+ <button data-v="images">Images</button>
+ <button data-v="volumes">Volumes</button>
+ <button data-v="networks">Netzwerke</button>
+ <button data-v="ports">Ports / Endpoints</button>
+ <button data-v="updates">Updates</button>
+ <button data-v="backups">Backups</button>
+ <button data-v="registry">Registry</button>
+ <button data-v="system">System</button>
+ <button data-v="help">Hilfe</button>
+</div>
+
+<div id="msg"></div>
+
+<section id="overview" class="view"></section>
+<section id="containers" class="view"></section>
+<section id="install" class="view"></section>
+<section id="projects" class="view"></section>
+<section id="images" class="view"></section>
+<section id="volumes" class="view"></section>
+<section id="networks" class="view"></section>
+<section id="ports" class="view"></section>
+<section id="updates" class="view"></section>
+<section id="backups" class="view"></section>
+<section id="registry" class="view"></section>
+<section id="system" class="view"></section>
+<section id="help" class="view"></section>
+
+<script>
+
+
+window.addEventListener('message',e=>{
+ if(e.origin!==location.origin || !e.data){
+  return;
+ }
+
+ if(e.data.type==='keyhelp-docker-auth'){
+  KEYHELP_DOCKER_TOKEN=String(e.data.token||'');
+  return;
+ }
+
+ if(e.data.type==='keyhelp-docker-view'){
+  const allowed=[
+     'overview',
+     'containers',
+     'install',
+     'projects',
+     'images',
+     'volumes',
+     'networks',
+     'ports',
+     'updates',
+     'backups',
+     'registry',
+     'system',
+     'help'
+   ];
+
+  const requested=String(e.data.view||'overview');
+
+  if(!allowed.includes(requested)){
+   return;
+  }
+
+  view(requested);
+
+  try{
+   parent.postMessage({
+    type:'docker-view',
+    view:requested
+   },location.origin);
+  }catch(err){}
+ }
+});
+
+let S={containers:[]};
+let U={containers:[]};
+let X={images:[],volumes:[],networks:[],disk:[]};
+let P={projects:[]};
+let R={registries:[],updated:null};
+
+const $=s=>document.querySelector(s);
+
+function esc(v){
+ const d=document.createElement('div');
+ d.textContent=v??'';
+ return d.innerHTML;
+}
+
+
+/* =========================================================
+   REGISTRY MANAGEMENT – 5C.3B-2
+   ========================================================= */
+
+async function registryApi(action,data={}){
+ const response=await fetch(
+  '/keyhelp-docker-api/action.cgi',
+  {
+   method:'POST',
+   credentials:'same-origin',
+   headers:{
+    'Content-Type':'application/json',
+    'X-Requested-With':'KeyHelpDockerManager',
+    'X-KeyHelp-Docker-Token':KEYHELP_DOCKER_TOKEN
+   },
+   body:JSON.stringify({
+    action,
+    ...data
+   })
+  }
+ );
+
+ const raw=await response.text();
+
+ let result;
+
+ try{
+  result=JSON.parse(raw);
+ }catch(e){
+  throw new Error(
+   'Server lieferte keine gültige JSON-Antwort.\n'+
+   'HTTP '+response.status+'\n\n'+
+   raw.slice(0,1000)
+  );
+ }
+
+ if(!response.ok || result.ok===false){
+  throw new Error(
+   result.output ||
+   result.error ||
+   result.message ||
+   ('HTTP '+response.status)
+  );
+ }
+
+ return result;
+}
+
+
+function registryMessage(title,text,type='info'){
+ const box=document.getElementById('registry-message');
+
+ if(!box){
+  return;
+ }
+
+ box.className='registry-message '+type;
+
+ box.innerHTML=
+  '<div class="registry-message-title">'+
+   esc(title)+
+  '</div>'+
+  '<pre>'+esc(text||'')+'</pre>';
+
+ box.style.display='block';
+
+ setTimeout(resize,30);
+}
+
+
+function registryBusy(on,text='Bitte warten …'){
+ const box=document.getElementById('registry-busy');
+
+ if(!box){
+  return;
+ }
+
+ box.textContent=text;
+ box.style.display=on?'block':'none';
+
+ document
+  .querySelectorAll('#registry button')
+  .forEach(b=>b.disabled=!!on);
+}
+
+
+async function registryReload(){
+ registryBusy(true,'Registry-Daten werden geladen …');
+
+ try{
+  const result=await registryApi('registry-list');
+
+  let list=[];
+
+  try{
+   list=JSON.parse(result.output||'[]');
+  }catch(e){
+   throw new Error(
+    'Registry-Liste konnte nicht gelesen werden.\n\n'+
+    (result.output||'')
+   );
+  }
+
+  R={
+   registries:Array.isArray(list)?list:[],
+   updated:new Date().toISOString()
+  };
+
+  renderRegistry();
+
+ }catch(err){
+  registryMessage(
+   'Registry-Liste konnte nicht geladen werden',
+   err.message || String(err),
+   'error'
+  );
+ }finally{
+  registryBusy(false);
+ }
+}
+
+
+async function registryLogin(){
+ const registry=(
+  document.getElementById('registry-host')?.value || ''
+ ).trim();
+
+ const username=(
+  document.getElementById('registry-user')?.value || ''
+ ).trim();
+
+ const password=
+  document.getElementById('registry-password')?.value || '';
+
+ if(!registry){
+  registryMessage(
+   'Eingabe fehlt',
+   'Bitte eine Registry angeben.',
+   'error'
+  );
+  return;
+ }
+
+ if(!username){
+  registryMessage(
+   'Eingabe fehlt',
+   'Bitte einen Benutzernamen angeben.',
+   'error'
+  );
+  return;
+ }
+
+ if(!password){
+  registryMessage(
+   'Eingabe fehlt',
+   'Bitte Passwort oder Token angeben.',
+   'error'
+  );
+  return;
+ }
+
+ registryBusy(
+  true,
+  'Anmeldung an '+registry+' läuft …'
+ );
+
+ try{
+  const result=await registryApi(
+   'registry-login',
+   {
+    registry,
+    username,
+    password
+   }
+  );
+
+  const pass=
+   document.getElementById('registry-password');
+
+  if(pass){
+   pass.value='';
+  }
+
+  registryMessage(
+   'Anmeldung erfolgreich',
+   result.output || 'Registry-Anmeldung abgeschlossen.',
+   'success'
+  );
+
+  await registryReload();
+
+ }catch(err){
+  registryMessage(
+   'Anmeldung fehlgeschlagen',
+   err.message || String(err),
+   'error'
+  );
+ }finally{
+  registryBusy(false);
+ }
+}
+
+
+async function registryTest(registryArg=''){
+ const input=document.getElementById('registry-host');
+
+ const registry=(
+  registryArg ||
+  input?.value ||
+  ''
+ ).trim();
+
+ if(!registry){
+  registryMessage(
+   'Eingabe fehlt',
+   'Bitte eine Registry angeben.',
+   'error'
+  );
+  return;
+ }
+
+ registryBusy(
+  true,
+  'Verbindung zu '+registry+' wird geprüft …'
+ );
+
+ try{
+  const result=await registryApi(
+   'registry-test',
+   {registry}
+  );
+
+  registryMessage(
+   'Verbindung erfolgreich',
+   result.output ||
+   'Registry ist erreichbar.',
+   'success'
+  );
+
+ }catch(err){
+  registryMessage(
+   'Verbindungstest fehlgeschlagen',
+   err.message || String(err),
+   'error'
+  );
+ }finally{
+  registryBusy(false);
+ }
+}
+
+
+async function registryLogout(registry){
+ registry=String(registry||'').trim();
+
+ if(!registry){
+  return;
+ }
+
+ if(!confirm(
+  'Registry-Anmeldung für '+registry+
+  ' wirklich entfernen?'
+ )){
+  return;
+ }
+
+ registryBusy(
+  true,
+  'Abmeldung von '+registry+' läuft …'
+ );
+
+ try{
+  const result=await registryApi(
+   'registry-logout',
+   {registry}
+  );
+
+  registryMessage(
+   'Abmeldung erfolgreich',
+   result.output ||
+   'Registry-Anmeldung wurde entfernt.',
+   'success'
+  );
+
+  await registryReload();
+
+ }catch(err){
+  registryMessage(
+   'Abmeldung fehlgeschlagen',
+   err.message || String(err),
+   'error'
+  );
+ }finally{
+  registryBusy(false);
+ }
+}
+
+
+function renderRegistry(){
+ const root=document.getElementById('registry');
+
+ if(!root){
+  return;
+ }
+
+ const regs=Array.isArray(R?.registries)
+  ? R.registries
+  : [];
+
+ const rows=regs.length
+  ? regs.map((r,index)=>{
+     const registry=
+      typeof r==='string'
+       ? r
+       : (
+          r.registry ||
+          r.server ||
+          r.host ||
+          r.name ||
+          ''
+         );
+
+     const username=
+      typeof r==='object' && r
+       ? (
+          r.username ||
+          r.user ||
+          ''
+         )
+       : '';
+
+     if(!registry){
+      return '';
+     }
+
+     return `
+      <div class="registry-entry">
+       <div class="registry-entry-main">
+        <div class="name">
+         ${esc(registry)}
+        </div>
+
+        <div class="muted">
+         ${
+          username
+           ? 'Benutzer: '+esc(username)
+           : 'Docker Registry'
+         }
+        </div>
+       </div>
+
+       <div class="actions">
+        <button
+         class="btn"
+         onclick='registryTest(${JSON.stringify(registry)})'>
+         Test
+        </button>
+
+        <button
+         class="btn danger"
+         onclick='registryLogout(${JSON.stringify(registry)})'>
+         Logout
+        </button>
+       </div>
+      </div>
+     `;
+    }).join('')
+  : `
+     <div class="registry-empty">
+      Noch keine Registry-Anmeldung gespeichert.
+     </div>
+    `;
+
+ root.innerHTML=`
+  <div class="registry-head">
+   <div>
+    <h2>Docker Registries</h2>
+    <div class="muted">
+     Private und öffentliche Docker-Registries
+     verwalten.
+    </div>
+   </div>
+
+   <button
+    class="btn"
+    onclick="registryReload()">
+    Neu laden
+   </button>
+  </div>
+
+  <div
+   id="registry-busy"
+   class="registry-busy"
+   style="display:none">
+  </div>
+
+  <div
+   id="registry-message"
+   class="registry-message"
+   style="display:none">
+  </div>
+
+  <div class="card registry-login-card">
+   <div class="name">
+    Registry anmelden
+   </div>
+
+   <div class="muted registry-intro">
+    Unterstützt beispielsweise Docker Hub,
+    GHCR und eigene Registry-Server.
+   </div>
+
+   <div class="registry-form">
+
+    <label>
+     <span>Registry</span>
+     <input
+      id="registry-host"
+      type="text"
+      autocomplete="off"
+      placeholder="ghcr.io">
+    </label>
+
+    <label>
+     <span>Benutzername</span>
+     <input
+      id="registry-user"
+      type="text"
+      autocomplete="username"
+      placeholder="Benutzername">
+    </label>
+
+    <label>
+     <span>Passwort / Token</span>
+     <input
+      id="registry-password"
+      type="password"
+      autocomplete="current-password"
+      placeholder="Passwort oder Access Token">
+    </label>
+
+   </div>
+
+   <div class="actions registry-login-actions">
+    <button
+     class="btn"
+     onclick="registryTest()">
+     Verbindung testen
+    </button>
+
+    <button
+     class="btn primary"
+     onclick="registryLogin()">
+     Anmelden
+    </button>
+   </div>
+  </div>
+
+  <div class="card">
+   <div class="registry-list-head">
+    <div>
+     <div class="name">
+      Gespeicherte Registries
+     </div>
+
+     <div class="muted">
+      ${
+       R?.updated
+        ? 'Stand: '+esc(R.updated)
+        : 'Noch nicht aktualisiert'
+      }
+     </div>
+    </div>
+
+    <div class="registry-count">
+     ${regs.length}
+    </div>
+   </div>
+
+   <div class="registry-list">
+    ${rows}
+   </div>
+  </div>
+
+  <div class="card">
+   <div class="name">
+    Hinweise
+   </div>
+
+   <div class="registry-help">
+    <p>
+     <b>Docker Hub:</b>
+     Registry-Feld kann leer nicht sein;
+     verwende bei Bedarf
+     <code>docker.io</code>.
+    </p>
+
+    <p>
+     <b>GitHub Container Registry:</b>
+     <code>ghcr.io</code>.
+     Als Passwort wird normalerweise ein
+     geeigneter Personal Access Token verwendet.
+    </p>
+
+    <p>
+     Zugangsdaten werden nicht im Browser
+     gespeichert. Das Passwort-/Token-Feld wird
+     nach erfolgreicher Anmeldung geleert.
+    </p>
+   </div>
+  </div>
+ `;
+
+ setTimeout(resize,30);
+}
+
+function resize(){
+ parent.postMessage({
+  type:'docker-height',
+  height:document.documentElement.scrollHeight
+ },'*');
+}
+
+function view(v){
+ document.querySelectorAll('.view').forEach(
+  x=>x.classList.toggle('active',x.id===v)
+ );
+
+ document.querySelectorAll('.tabs button').forEach(
+  x=>x.classList.toggle('active',x.dataset.v===v)
+ );
+
+ location.hash=v==='overview'?'':v;
+ setTimeout(resize,30);
+}
+
+function toggle(id){
+ const e=document.getElementById(id);
+ if(e)e.classList.toggle('open');
+ resize();
+}
+
+function state(c){
+ if(c.state!=='running')
+  return '<span class="bad">● '+esc(c.state)+'</span>';
+
+ if(c.health==='unhealthy')
+  return '<span class="bad">● Unhealthy</span>';
+
+ if(c.health==='healthy')
+  return '<span class="good">● Healthy</span>';
+
+ return '<span class="good">● Running</span>';
+}
+
+
+function closeDockerModal(){
+ const modal=document.getElementById('docker-result-modal');
+ if(modal) modal.remove();
+}
+
+async function copyDockerModal(){
+ const el=document.getElementById('docker-result-output');
+ if(!el) return;
+
+ try{
+  await navigator.clipboard.writeText(el.textContent||'');
+ }catch(e){
+  console.error('Kopieren fehlgeschlagen:',e);
+ }
+}
+
+
+/*
+ * Zentrale Ergebnisanzeige.
+ *
+ * Historische Manager-Bereiche verwenden showResult().
+ * Die aktuelle Modal-Implementierung heißt showDockerModal().
+ *
+ * success=true  -> normales Ergebnis
+ * success=false -> Fehlermeldung
+ */
+function showResult(title,output,success=true){
+ showDockerModal(
+  title,
+  output || '',
+  success===false
+ );
+}
+
+
+function showDockerModal(title,output,isError=false){
+ closeDockerModal();
+
+ const modal=document.createElement('div');
+ modal.id='docker-result-modal';
+ modal.className='docker-modal';
+
+ const box=document.createElement('div');
+ box.className=
+  'docker-modal-box ' +
+  (isError?'docker-modal-error':'docker-modal-ok');
+
+ const head=document.createElement('div');
+ head.className='docker-modal-head';
+
+ const titleEl=document.createElement('div');
+ titleEl.className='docker-modal-title';
+ titleEl.textContent=title;
+
+ const close=document.createElement('button');
+ close.type='button';
+ close.className='docker-modal-close';
+ close.textContent='×';
+ close.onclick=closeDockerModal;
+
+ head.appendChild(titleEl);
+ head.appendChild(close);
+
+ const body=document.createElement('div');
+ body.className='docker-modal-body';
+
+ const pre=document.createElement('pre');
+ pre.id='docker-result-output';
+ pre.className='docker-modal-output';
+ pre.textContent=String(output||'');
+
+ body.appendChild(pre);
+
+ const actions=document.createElement('div');
+ actions.className='docker-modal-actions';
+
+ const copy=document.createElement('button');
+ copy.type='button';
+ copy.className='btn';
+ copy.textContent='Kopieren';
+ copy.onclick=copyDockerModal;
+
+ const done=document.createElement('button');
+ done.type='button';
+ done.className='btn primary';
+ done.textContent='Schließen';
+ done.onclick=closeDockerModal;
+
+ actions.appendChild(copy);
+ actions.appendChild(done);
+
+ box.appendChild(head);
+ box.appendChild(body);
+ box.appendChild(actions);
+ modal.appendChild(box);
+
+ modal.addEventListener('click',e=>{
+  if(e.target===modal) closeDockerModal();
+ });
+
+ document.body.appendChild(modal);
+}
+
+
+async function action(a,t=''){
+
+ const dangerous = new Set([
+  'stop',
+  'remove-container',
+  'remove-image',
+  'remove-volume',
+  'prune-images',
+  'prune-volumes',
+  'prune-networks',
+  'prune-build-cache',
+  'update',
+  'install-engine'
+ ]);
+
+ const labels = {
+  'start':'Container starten',
+  'stop':'Container stoppen',
+  'restart':'Container neu starten',
+  'logs':'Logs laden',
+  'inspect':'Container untersuchen',
+  'backup':'Backup erstellen',
+  'update-check':'Updates prüfen',
+  'update':'Container aktualisieren',
+  'install-engine':'Docker installieren / prüfen',
+  'pull-image':'Image herunterladen',
+  'remove-container':'Container entfernen',
+  'remove-image':'Image entfernen',
+  'remove-volume':'Volume entfernen',
+  'prune-images':'Ungenutzte Images bereinigen',
+  'prune-volumes':'Ungenutzte Volumes bereinigen',
+  'prune-networks':'Ungenutzte Netzwerke bereinigen',
+  'prune-build-cache':'Build-Cache bereinigen'
+ };
+
+ const label = labels[a] || a;
+
+ if(dangerous.has(a)){
+  let msg =
+   'Aktion wirklich ausführen?\n\n' +
+   label +
+   (t ? '\nZiel: ' + t : '');
+
+  if(a === 'remove-volume'){
+   msg +=
+    '\n\nACHTUNG: Ein Volume kann dauerhafte Daten enthalten.';
+  }
+
+  if(a === 'remove-container'){
+   msg +=
+    '\n\nDer Container wird entfernt. Persistente Daten hängen von den verwendeten Volumes/Mounts ab.';
+  }
+
+  if(a === 'update'){
+   msg +=
+    '\n\nVor produktiven Updates sollte ein aktuelles Backup vorhanden sein.';
+  }
+
+  if(!confirm(msg)){
+   return;
+  }
+ }
+
+ // ---------------------------------------------------------
+ // UI sperren
+ // ---------------------------------------------------------
+
+ const buttons = [...document.querySelectorAll('button')];
+
+ buttons.forEach(b => {
+  b.dataset.wasDisabled = b.disabled ? '1' : '0';
+  b.disabled = true;
+ });
+
+ const overlay = document.createElement('div');
+ overlay.className = 'busy-overlay';
+ overlay.id = 'docker-busy-overlay';
+
+ const box = document.createElement('div');
+ box.className = 'busy-box';
+ box.textContent = label + ' …';
+
+ overlay.appendChild(box);
+ document.body.appendChild(overlay);
+
+ try{
+
+  const response = await fetch(
+   '/keyhelp-docker-api/action.cgi',
+   {
+    method:'POST',
+    credentials:'same-origin',
+    headers:{
+     'Content-Type':'application/json',
+     'X-Requested-With':'KeyHelpDockerManager',},
+    body:JSON.stringify({
+     action:a,
+     target:t
+    })
+   }
+  );
+
+  // Erst Text lesen.
+  // Dadurch bekommen wir auch bei Apache-/CGI-HTML-Fehlern
+  // eine verständliche Meldung statt "Unexpected token <".
+  const raw = await response.text();
+
+  let result;
+
+  try{
+   result = JSON.parse(raw);
+  }catch(e){
+
+   const preview = raw
+    .replace(/<[^>]*>/g,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .slice(0,500);
+
+   throw new Error(
+    'Server lieferte keine gültige JSON-Antwort.' +
+    '\nHTTP ' + response.status +
+    (preview ? '\n\n' + preview : '')
+   );
+  }
+
+  if(!response.ok || result.ok === false){
+
+   const message =
+    result.output ||
+    result.error ||
+    result.message ||
+    ('HTTP ' + response.status);
+
+   throw new Error(message);
+  }
+
+  let output =
+   result.output ||
+   result.message ||
+   'Aktion erfolgreich abgeschlossen.';
+
+  showDockerModal(
+   label,
+   output,
+   false
+  );
+
+  // Status nach Aktion neu einlesen.
+  // Beim Update-Check kurz Cache vermeiden und danach neu rendern.
+  if(a==='update-check'){
+   try{
+    U=await fetch(
+     '../updates.json?'+Date.now(),
+     {cache:'no-store'}
+    ).then(r=>{
+     if(!r.ok) throw new Error('updates.json HTTP '+r.status);
+     return r.json();
+    });
+   }catch(e){
+    console.error('updates.json konnte nicht neu geladen werden:',e);
+   }
+  }
+
+  if(typeof load === 'function'){
+   await load();
+  }
+
+ }catch(err){
+
+  console.error('Docker Manager:', err);
+
+  showDockerModal(
+   'Docker-Aktion fehlgeschlagen – ' + label,
+   (err && err.message ? err.message : String(err)),
+   true
+  );
+
+ }finally{
+
+  const currentOverlay =
+   document.getElementById('docker-busy-overlay');
+
+  if(currentOverlay){
+   currentOverlay.remove();
+  }
+
+  buttons.forEach(b => {
+   b.disabled = b.dataset.wasDisabled === '1';
+   delete b.dataset.wasDisabled;
+  });
+ }
+}
+
+
+/* RICOREWI_NETWORK_UI_5C3CB */
+
+function networkProtected(name){
+ return ['bridge','host','none'].includes(String(name||''));
+}
+
+function networkIpam(network){
+ const configs=network?.ipam?.Config || network?.ipam?.config || [];
+
+ if(!Array.isArray(configs) || !configs.length){
+  return {
+   subnet:'–',
+   gateway:'–',
+   range:'–'
+  };
+ }
+
+ const c=configs[0] || {};
+
+ return {
+  subnet:c.Subnet || c.subnet || '–',
+  gateway:c.Gateway || c.gateway || '–',
+  range:c.IPRange || c.ip_range || c.iprange || '–'
+ };
+}
+
+function networkContainerOptions(selected=''){
+ const containers=S.containers||[];
+
+ return containers.map(c=>{
+  const name=String(c.name||'');
+
+  return `
+   <option value="${esc(name)}"
+    ${name===selected?'selected':''}>
+    ${esc(name)}
+   </option>
+  `;
+ }).join('');
+}
+
+async function networkCreate(){
+ const name=(
+  document.getElementById('network-create-name')?.value || ''
+ ).trim();
+
+ const driver=(
+  document.getElementById('network-create-driver')?.value || 'bridge'
+ ).trim();
+
+ const subnet=(
+  document.getElementById('network-create-subnet')?.value || ''
+ ).trim();
+
+ const gateway=(
+  document.getElementById('network-create-gateway')?.value || ''
+ ).trim();
+
+ const internal=
+  !!document.getElementById('network-create-internal')?.checked;
+
+ if(!name){
+  managerMessage(
+   'Netzwerkname fehlt',
+   'Bitte einen Namen für das Docker-Netzwerk eingeben.',
+   'error'
+  );
+  return;
+ }
+
+ const data={
+  name,
+  target:name,
+  driver,
+  subnet,
+  gateway,
+  internal
+ };
+
+ const result=await actionData(
+  'network-create',
+  data,
+  'Docker-Netzwerk erstellen'
+ );
+
+ if(result!==false){
+  await load();
+  view('networks');
+ }
+}
+
+async function networkInspect(name){
+ const result=await actionData(
+  'network-inspect',
+  {
+   name:name,
+   target:name,
+   network:name
+  },
+  'Netzwerk untersuchen'
+ );
+
+ if(!result || result===false){
+  return;
+ }
+
+ let output=result.output || '';
+
+ try{
+  const parsed=JSON.parse(output);
+  output=JSON.stringify(parsed,null,2);
+ }catch(e){}
+
+ showDockerOutput(
+  'Network Inspect: '+name,
+  output || 'Keine Ausgabe.'
+ );
+}
+
+async function networkRemove(name){
+ if(networkProtected(name)){
+  managerMessage(
+   'Geschütztes Docker-Netzwerk',
+   'Die Docker-Systemnetzwerke bridge, host und none werden vom Manager nicht gelöscht.',
+   'error'
+  );
+  return;
+ }
+
+ const network=(X.networks||[]).find(
+  n=>String(n.name)===String(name)
+ );
+
+ if(network && (network.containers||[]).length){
+  managerMessage(
+   'Netzwerk wird verwendet',
+   'Vor dem Löschen müssen alle Container von diesem Netzwerk getrennt werden.',
+   'error'
+  );
+  return;
+ }
+
+ if(!confirm(
+  'Docker-Netzwerk "'+name+'" wirklich löschen?\n\n'+
+  'Dieser Vorgang kann nicht rückgängig gemacht werden.'
+ )){
+  return;
+ }
+
+ const result=await actionData(
+  'network-remove',
+  {
+   name:name,
+   target:name,
+   network:name
+  },
+  'Docker-Netzwerk löschen'
+ );
+
+ if(result!==false){
+  await load();
+  view('networks');
+ }
+}
+
+async function networkConnect(name){
+ const select=document.getElementById(
+  'network-connect-'+networkSafeId(name)
+ );
+
+ const container=(select?.value || '').trim();
+
+ if(!container){
+  managerMessage(
+   'Container fehlt',
+   'Bitte einen Container auswählen.',
+   'error'
+  );
+  return;
+ }
+
+ const result=await actionData(
+  'network-connect',
+  {
+   name:name,
+   target:name,
+   network:name,
+   container:container
+  },
+  'Container mit Netzwerk verbinden'
+ );
+
+ if(result!==false){
+  await load();
+  view('networks');
+ }
+}
+
+async function networkDisconnect(name,container){
+ if(!confirm(
+  'Container "'+container+'" vom Netzwerk "'+name+'" trennen?'
+ )){
+  return;
+ }
+
+ const result=await actionData(
+  'network-disconnect',
+  {
+   name:name,
+   target:name,
+   network:name,
+   container:container
+  },
+  'Container vom Netzwerk trennen'
+ );
+
+ if(result!==false){
+  await load();
+  view('networks');
+ }
+}
+
+function networkSafeId(value){
+ return String(value||'')
+  .replace(/[^A-Za-z0-9_-]/g,'_');
+}
+
+function managerMessage(title,text,type='info'){
+ const old=document.getElementById('network-manager-message');
+
+ if(old){
+  old.remove();
+ }
+
+ const box=document.createElement('div');
+ box.id='network-manager-message';
+
+ box.className=
+  type==='error'
+   ? 'notice help-bad'
+   : 'notice help-good';
+
+ box.innerHTML=
+  '<b>'+esc(title)+'</b><br>'+
+  esc(text).replace(/\n/g,'<br>');
+
+ const section=document.getElementById('networks');
+
+ if(section){
+  section.prepend(box);
+ }
+
+ setTimeout(resize,20);
+}
+
+function showDockerOutput(title,output){
+ showDockerModal(
+  title,
+  output || 'Keine Ausgabe.',
+  false
+ );
+}
+
+function networkRow(n,index){
+ const ipam=networkIpam(n);
+ const containers=n.containers||[];
+ const protectedNetwork=networkProtected(n.name);
+ const sid=networkSafeId(n.name);
+
+ const connectedNames=new Set(
+  containers.map(c=>String(c.name||''))
+ );
+
+ const available=(S.containers||[]).filter(
+  c=>!connectedNames.has(String(c.name||''))
+ );
+
+ return `
+ <div class="item">
+
+  <div class="head">
+   <div>
+    <div class="name">${esc(n.name)}</div>
+
+    <div class="muted">
+     ${esc(n.driver||'–')} ·
+     ${esc(n.scope||'–')}
+     ${n.internal?' · Intern':''}
+    </div>
+   </div>
+
+   <div>
+    ${
+     protectedNetwork
+      ? '<span class="badge">Docker System</span>'
+      : ''
+    }
+
+    <span class="badge">
+     ${containers.length} Container
+    </span>
+   </div>
+  </div>
+
+  <div class="network-summary">
+   <div>
+    <b>Subnetz</b><br>
+    ${esc(ipam.subnet)}
+   </div>
+
+   <div>
+    <b>Gateway</b><br>
+    ${esc(ipam.gateway)}
+   </div>
+
+   <div>
+    <b>IP-Range</b><br>
+    ${esc(ipam.range)}
+   </div>
+  </div>
+
+  <div class="actions">
+   <button class="btn"
+    onclick="toggle('net${index}')">
+    Details
+   </button>
+
+   <button class="btn"
+    onclick="networkInspect('${esc(n.name)}')">
+    Inspect
+   </button>
+
+   ${
+    !protectedNetwork && !containers.length
+     ? `
+      <button class="btn danger"
+       onclick="networkRemove('${esc(n.name)}')">
+       Netzwerk löschen
+      </button>
+     `
+     : ''
+   }
+  </div>
+
+  <div class="details" id="net${index}">
+
+   <p>
+    <b>Network ID:</b><br>
+    <span class="mono">${esc(n.id||'–')}</span>
+   </p>
+
+   <p>
+    <b>Treiber:</b> ${esc(n.driver||'–')}<br>
+    <b>Scope:</b> ${esc(n.scope||'–')}<br>
+    <b>Internal:</b> ${n.internal?'Ja':'Nein'}<br>
+    <b>Subnetz:</b> ${esc(ipam.subnet)}<br>
+    <b>Gateway:</b> ${esc(ipam.gateway)}<br>
+    <b>IP-Range:</b> ${esc(ipam.range)}
+   </p>
+
+   <hr>
+
+   <div class="name">Verbundene Container</div>
+
+   ${
+    containers.length
+     ? containers.map(c=>`
+       <div class="item">
+        <div class="head">
+         <div>
+          <b>${esc(c.name)}</b>
+          <div class="muted">
+           IPv4: ${esc(c.ipv4||'–')}
+           ${c.ipv6?' · IPv6: '+esc(c.ipv6):''}
+          </div>
+         </div>
+
+         ${
+          !protectedNetwork
+           ? `
+            <button class="btn danger"
+             onclick="networkDisconnect(
+              '${esc(n.name)}',
+              '${esc(c.name)}'
+             )">
+             Trennen
+            </button>
+           `
+           : ''
+         }
+        </div>
+       </div>
+      `).join('')
+     : '<p class="muted">Keine Container verbunden.</p>'
+   }
+
+   ${
+    !protectedNetwork
+     ? `
+      <hr>
+
+      <div class="name">Container verbinden</div>
+
+      ${
+       available.length
+        ? `
+         <div class="network-connect-row">
+
+          <select
+           id="network-connect-${sid}"
+           class="input">
+           <option value="">Container auswählen …</option>
+           ${available.map(c=>`
+            <option value="${esc(c.name)}">
+             ${esc(c.name)}
+            </option>
+           `).join('')}
+          </select>
+
+          <button class="btn primary"
+           onclick="networkConnect('${esc(n.name)}')">
+           Verbinden
+          </button>
+
+         </div>
+        `
+        : '<p class="muted">Alle bekannten Container sind bereits verbunden.</p>'
+      }
+     `
+     : `
+      <div class="notice">
+       Docker-Systemnetzwerk. Kritische Änderungen sind
+       im Manager absichtlich gesperrt.
+      </div>
+     `
+   }
+
+  </div>
+ </div>
+ `;
+}
+
+function renderNetworks(){
+ const networks=X.networks||[];
+
+ const target=document.getElementById('networks');
+
+ if(!target){
+  return;
+ }
+
+ target.innerHTML=`
+
+ <div class="card">
+
+  <div class="head">
+   <div>
+    <div class="name">Docker Netzwerke</div>
+    <div class="muted">
+     Netzwerke verwalten, Container verbinden und
+     IPAM-Konfiguration prüfen.
+    </div>
+   </div>
+
+   <span class="badge">
+    ${networks.length} Netzwerke
+   </span>
+  </div>
+
+ </div>
+
+ <div class="card">
+
+  <div class="name">Neues Netzwerk erstellen</div>
+
+  <div class="network-form">
+
+   <label>
+    <span>Name</span>
+    <input
+     id="network-create-name"
+     class="input"
+     type="text"
+     placeholder="z. B. mein-projekt">
+   </label>
+
+   <label>
+    <span>Treiber</span>
+    <select
+     id="network-create-driver"
+     class="input">
+     <option value="bridge">bridge</option>
+    </select>
+   </label>
+
+   <label>
+    <span>Subnetz (optional)</span>
+    <input
+     id="network-create-subnet"
+     class="input"
+     type="text"
+     placeholder="z. B. 172.30.0.0/16">
+   </label>
+
+   <label>
+    <span>Gateway (optional)</span>
+    <input
+     id="network-create-gateway"
+     class="input"
+     type="text"
+     placeholder="z. B. 172.30.0.1">
+   </label>
+
+  </div>
+
+  <label class="network-check">
+   <input
+    id="network-create-internal"
+    type="checkbox">
+   Internes Netzwerk ohne externen Zugriff
+  </label>
+
+  <div class="actions">
+   <button
+    class="btn primary"
+    onclick="networkCreate()">
+    Netzwerk erstellen
+   </button>
+  </div>
+
+  <div class="muted">
+   Ohne Subnetz und Gateway übernimmt Docker automatisch
+   die IPAM-Konfiguration.
+  </div>
+
+ </div>
+
+ <div class="card">
+
+  <div class="name">Vorhandene Netzwerke</div>
+
+  ${
+   networks.length
+    ? networks.map(networkRow).join('')
+    : '<div class="notice">Keine Docker-Netzwerke gefunden.</div>'
+  }
+
+ </div>
+ `;
+
+ resize();
+}
+
+
+function containerRow(c,i){
+ const ports=(c.ports||[]).map(
+  p=>(p.host_ip||'')+':'+(p.host_port||'intern')+' → '+p.container
+ ).join('<br>')||'–';
+
+ const nets=(c.networks||[]).map(
+  n=>esc(n.name)+' ('+esc(n.ip||'keine IP')+')'
+ ).join('<br>')||'–';
+
+ const mounts=(c.mounts||[]).map(
+  m=>esc(m.type)+' · '+esc(m.name||m.source)+' → '+esc(m.destination)
+ ).join('<br>')||'–';
+
+ return `
+ <div class="item">
+  <div class="head">
+   <div>
+    <div class="name">${esc(c.name)}</div>
+    <div class="muted">${esc(c.image)}</div>
+   </div>
+   <div>${state(c)}</div>
+  </div>
+
+  <div class="actions">
+   ${
+    c.state==='running'
+    ? `
+      <button class="btn warn" onclick="action('restart','${esc(c.name)}')">Neustart</button>
+      <button class="btn danger" onclick="action('stop','${esc(c.name)}')">Stop</button>
+      `
+    : `
+      <button class="btn primary" onclick="action('start','${esc(c.name)}')">Start</button>
+      `
+   }
+
+   <button class="btn" onclick="action('logs','${esc(c.name)}')">Logs</button>
+   <button class="btn" onclick="action('inspect','${esc(c.name)}')">Inspect</button>
+   <button class="btn" onclick="toggle('d${i}')">Details</button>
+   <button class="btn warn" onclick="action('update','${esc(c.name)}')">Update</button>
+
+   ${
+    c.state!=='running'
+    ? `<button class="btn danger" onclick="action('remove-container','${esc(c.name)}')">Entfernen</button>`
+    :''
+   }
+  </div>
+
+  <div id="d${i}" class="details">
+   <b>CPU:</b> ${esc(c.stats?.cpu||'–')}<br>
+   <b>RAM:</b> ${esc(c.stats?.memory_usage||'–')}
+   (${esc(c.stats?.memory_percent||'–')})<br>
+   <b>PIDs:</b> ${esc(c.stats?.pids??'–')}<br>
+   <b>Netzwerk I/O:</b> ${esc(c.stats?.network_io||'–')}<br>
+   <b>Block I/O:</b> ${esc(c.stats?.block_io||'–')}<br>
+   <b>Restart Policy:</b> ${esc(c.restart_policy||'–')}<br>
+   <b>Gestartet:</b> ${esc(c.started_at||'–')}<br><br>
+
+   <b>Ports</b><br>${ports}<br><br>
+   <b>Netzwerke</b><br>${nets}<br><br>
+   <b>Mounts</b><br>${mounts}
+  </div>
+ </div>`;
+}
+
+
+
+async function actionData(actionName,data,label){
+ const buttons=[...document.querySelectorAll('button')];
+
+ buttons.forEach(b=>{
+  b.dataset.wasDisabled=b.disabled?'1':'0';
+  b.disabled=true;
+ });
+
+ const overlay=document.createElement('div');
+ overlay.className='busy-overlay';
+ overlay.id='docker-busy-overlay';
+
+ const box=document.createElement('div');
+ box.className='busy-box';
+ box.textContent=label+' …';
+
+ overlay.appendChild(box);
+ document.body.appendChild(overlay);
+
+ try{
+
+  const response=await fetch(
+   '/keyhelp-docker-api/action.cgi',
+   {
+    method:'POST',
+    credentials:'same-origin',
+    headers:{
+     'Content-Type':'application/json',
+     'X-Requested-With':'KeyHelpDockerManager',
+     'X-KeyHelp-Docker-Token':KEYHELP_DOCKER_TOKEN
+    },
+    body:JSON.stringify({
+     action:actionName,
+     ...data
+    })
+   }
+  );
+
+  const raw=await response.text();
+
+  let result;
+
+  try{
+   result=JSON.parse(raw);
+  }catch(e){
+   throw new Error(
+    'Server lieferte keine gültige JSON-Antwort.\nHTTP '+
+    response.status+
+    '\n\n'+
+    raw.replace(/<[^>]*>/g,' ')
+       .replace(/\s+/g,' ')
+       .trim()
+       .slice(0,1000)
+   );
+  }
+
+  if(!response.ok || result.ok===false){
+   throw new Error(
+    result.output||
+    result.error||
+    result.message||
+    ('HTTP '+response.status)
+   );
+  }
+
+  showResult(
+   label,
+   result.output||
+   result.message||
+   'Aktion erfolgreich abgeschlossen.',
+   true
+  );
+
+  if(typeof load==='function'){
+   await load();
+  }
+
+  return result;
+
+ }catch(err){
+
+  console.error('Docker Manager:',err);
+
+  showResult(
+   label+' fehlgeschlagen',
+   err && err.message
+    ? err.message
+    : String(err),
+   false
+  );
+
+ }finally{
+
+  const currentOverlay=
+   document.getElementById('docker-busy-overlay');
+
+  if(currentOverlay){
+   currentOverlay.remove();
+  }
+
+  buttons.forEach(b=>{
+   b.disabled=b.dataset.wasDisabled==='1';
+   delete b.dataset.wasDisabled;
+  });
+
+  resize();
+ }
+}
+
+
+function installImage(){
+ const el=document.getElementById('install-image-name');
+ const image=(el?.value||'').trim();
+
+ if(!image){
+  showResult(
+   'Image fehlt',
+   'Bitte einen Image-Namen eingeben.',
+   false
+  );
+  return;
+ }
+
+ action('pull-image',image);
+}
+
+
+function installGitProject(){
+ const url=(document.getElementById('install-git-url')?.value||'').trim();
+ const ref=(document.getElementById('install-git-ref')?.value||'main').trim();
+ const name=(document.getElementById('install-git-name')?.value||'').trim();
+
+ if(!url){
+  showResult(
+   'Repository fehlt',
+   'Bitte eine GitHub-/Git-Repository-Adresse eingeben.',
+   false
+  );
+  return;
+ }
+
+ actionData(
+  'install-git',
+  {
+   url:url,
+   ref:ref,
+   name:name
+  },
+  'Git-/Compose-Projekt installieren'
+ );
+}
+
+
+function installDockerCommand(){
+ const cmd=(document.getElementById('install-docker-command')?.value||'').trim();
+
+ if(!cmd){
+  showResult(
+   'Befehl fehlt',
+   'Bitte einen Docker-Befehl eingeben.',
+   false
+  );
+  return;
+ }
+
+ if(!cmd.startsWith('docker run ')){
+  showResult(
+   'Nicht zugelassen',
+   'Hier werden ausschließlich docker run Befehle akzeptiert.',
+   false
+  );
+  return;
+ }
+
+ actionData(
+  'docker-run',
+  {command:cmd},
+  'Docker Container erstellen'
+ );
+}
+
+
+function installComposeProject(){
+ const path=(document.getElementById('install-compose-path')?.value||'').trim();
+
+ if(!path){
+  showResult(
+   'Verzeichnis fehlt',
+   'Bitte das Projektverzeichnis angeben.',
+   false
+  );
+  return;
+ }
+
+ actionData(
+  'compose-up',
+  {path:path},
+  'Compose-Projekt starten'
+ );
+}
+
+
+
+function projectAction(actionName,path,label){
+ actionData(
+  actionName,
+  {path:path},
+  label
+ );
+}
+
+
+function projectDeploy(path){
+ projectAction(
+  'project-deploy',
+  path,
+  'Projekt aktualisieren / deployen'
+ );
+}
+
+
+function projectGitDeploy(path){
+ projectAction(
+  'project-git-deploy',
+  path,
+  'Git Pull + Deploy'
+ );
+}
+
+
+function projectRow(project,index){
+
+ const git=project.git||{};
+ const containers=project.containers||[];
+ const services=project.services||[];
+
+ const running=Number(project.running||0);
+ const total=Number(project.container_count||0);
+
+ const status=
+  total===0
+   ? '<span class="badge">Nicht gestartet</span>'
+   : running===total
+      ? '<span class="good">● Läuft</span>'
+      : running>0
+         ? '<span class="warn">● Teilweise aktiv</span>'
+         : '<span class="bad">● Gestoppt</span>';
+
+ return `
+ <div class="item">
+
+  <div class="head">
+   <div>
+    <div class="name">
+     ${esc(project.name||'Projekt')}
+    </div>
+
+    <div class="muted">
+     ${esc(project.path||'')}
+    </div>
+   </div>
+
+   <div>
+    ${status}
+   </div>
+  </div>
+
+  <div class="muted" style="margin-top:8px">
+   Compose:
+   <b>${esc(project.compose_file||'–')}</b>
+   · Services:
+   <b>${esc(project.service_count||0)}</b>
+   · Container:
+   <b>${running}/${total}</b>
+  </div>
+
+  ${
+   git.is_git
+    ? `
+      <div class="muted" style="margin-top:6px">
+       Git:
+       ${esc(git.repository||'Repository')}
+       ${git.branch?' · Branch '+esc(git.branch):''}
+       ${git.commit?' · '+esc(git.commit):''}
+       ${git.dirty
+          ? ' · <span class="bad">lokale Änderungen</span>'
+          : ''
+       }
+      </div>
+     `
+    : ''
+  }
+
+  <div class="actions">
+
+   <button class="btn primary"
+    onclick="projectAction(
+     'project-start',
+     '${esc(project.path)}',
+     'Projekt starten'
+    )">
+    Start
+   </button>
+
+   <button class="btn"
+    onclick="projectAction(
+     'project-stop',
+     '${esc(project.path)}',
+     'Projekt stoppen'
+    )">
+    Stop
+   </button>
+
+   <button class="btn"
+    onclick="projectAction(
+     'project-restart',
+     '${esc(project.path)}',
+     'Projekt neu starten'
+    )">
+    Neustart
+   </button>
+
+   <button class="btn"
+    onclick="projectAction(
+     'project-pull',
+     '${esc(project.path)}',
+     'Projekt-Images aktualisieren'
+    )">
+    Pull
+   </button>
+
+   <button class="btn"
+    onclick="projectAction(
+     'project-build',
+     '${esc(project.path)}',
+     'Projekt bauen'
+    )">
+    Build
+   </button>
+
+   <button class="btn warn"
+    onclick="projectDeploy('${esc(project.path)}')">
+    Update / Deploy
+   </button>
+
+   ${
+    git.is_git
+     ? `
+       <button class="btn warn"
+        onclick="projectGitDeploy('${esc(project.path)}')">
+        Git Pull + Deploy
+       </button>
+      `
+     : ''
+   }
+
+   <button class="btn"
+    onclick="projectAction(
+     'project-logs',
+     '${esc(project.path)}',
+     'Projekt-Logs'
+    )">
+    Logs
+   </button>
+
+   <button class="btn"
+    onclick="projectAction(
+     'project-config',
+     '${esc(project.path)}',
+     'Compose Config'
+    )">
+    Config
+   </button>
+
+   <button class="btn danger"
+    onclick="projectAction(
+     'project-down',
+     '${esc(project.path)}',
+     'Stack herunterfahren'
+    )">
+    Down
+   </button>
+
+   <button class="btn"
+    onclick="toggle('project-${index}')">
+    Details
+   </button>
+
+  </div>
+
+  <div class="details" id="project-${index}">
+
+   <div class="name">Services</div>
+
+   ${
+    services.length
+     ? services.map(x=>
+        `<span class="badge">${esc(x)}</span>`
+       ).join(' ')
+     : '<span class="muted">Keine Services erkannt.</span>'
+   }
+
+   <div class="name" style="margin-top:16px">
+    Container
+   </div>
+
+   ${
+    containers.length
+     ? containers.map(c=>`
+        <div class="item">
+         <b>${esc(c.name||c.service||'Container')}</b>
+         <div class="muted">
+          ${esc(c.service||'')}
+          ${c.image?' · '+esc(c.image):''}
+          ${c.status?' · '+esc(c.status):''}
+         </div>
+        </div>
+       `).join('')
+     : '<p class="muted">Noch keine Container gestartet.</p>'
+   }
+
+  </div>
+
+ </div>
+ `;
+}
+
+
+
+/* RICOREWI_PORT_ENDPOINTS_5C3CC */
+
+function portExposure(p){
+ const ip=String(p.host_ip||'');
+
+ if(!p.host_port){
+  return {
+   cls:'port-internal',
+   text:'nur intern'
+  };
+ }
+
+ if(ip==='127.0.0.1' || ip==='::1'){
+  return {
+   cls:'port-local',
+   text:'localhost'
+  };
+ }
+
+ if(ip==='0.0.0.0' || ip==='::' || ip===''){
+  return {
+   cls:'port-public',
+   text:'öffentlich gebunden'
+  };
+ }
+
+ return {
+  cls:'port-bound',
+  text:ip
+ };
+}
+
+function renderPorts(){
+
+ const root=document.getElementById('ports');
+ if(!root) return;
+
+ const containers=Array.isArray(S.containers)
+  ? S.containers
+  : [];
+
+ let published=0;
+ let internal=0;
+ let publicBindings=0;
+ let localhostBindings=0;
+
+ containers.forEach(c=>{
+  (c.ports||[]).forEach(p=>{
+   if(p.host_port){
+    published++;
+
+    const e=portExposure(p);
+
+    if(e.cls==='port-public') publicBindings++;
+    if(e.cls==='port-local') localhostBindings++;
+   }else{
+    internal++;
+   }
+  });
+ });
+
+ root.innerHTML=`
+  <div class="card">
+   <div class="name">Port- und Endpoint-Übersicht</div>
+
+   <div class="muted">
+    Docker-Portbindungen und interne Netzwerk-Endpunkte.
+    Diese Ansicht verändert keine Docker-Konfiguration.
+   </div>
+
+   <div class="endpoint-summary">
+    <div>
+     <b>${containers.length}</b>
+     <span>Container</span>
+    </div>
+
+    <div>
+     <b>${published}</b>
+     <span>veröffentlichte Bindungen</span>
+    </div>
+
+    <div>
+     <b>${localhostBindings}</b>
+     <span>nur localhost</span>
+    </div>
+
+    <div>
+     <b>${publicBindings}</b>
+     <span>alle Interfaces</span>
+    </div>
+
+    <div>
+     <b>${internal}</b>
+     <span>nur intern</span>
+    </div>
+   </div>
+  </div>
+
+  ${
+   containers.length
+   ? containers.map((c,index)=>{
+
+      const ports=Array.isArray(c.ports) ? c.ports : [];
+      const nets=Array.isArray(c.networks) ? c.networks : [];
+
+      return `
+       <div class="card endpoint-card">
+
+        <div class="row">
+         <div>
+          <div class="name">${esc(c.name)}</div>
+          <div class="muted">
+           ${esc(c.image||'')}
+          </div>
+         </div>
+
+         <span class="badge ${
+          c.state==='running' ? 'ok' : ''
+         }">
+          ${esc(c.state||'unbekannt')}
+         </span>
+        </div>
+
+        <h4>Ports</h4>
+
+        ${
+         ports.length
+         ? `
+          <div class="endpoint-table-wrap">
+           <table class="endpoint-table">
+            <thead>
+             <tr>
+              <th>Container</th>
+              <th>Host-IP</th>
+              <th>Host-Port</th>
+              <th>Erreichbarkeit</th>
+             </tr>
+            </thead>
+            <tbody>
+             ${ports.map(p=>{
+               const e=portExposure(p);
+
+               return `
+                <tr>
+                 <td><code>${esc(p.container||'–')}</code></td>
+                 <td><code>${esc(p.host_ip||'–')}</code></td>
+                 <td><code>${esc(p.host_port||'–')}</code></td>
+                 <td>
+                  <span class="port-state ${e.cls}">
+                   ${esc(e.text)}
+                  </span>
+                 </td>
+                </tr>
+               `;
+             }).join('')}
+            </tbody>
+           </table>
+          </div>
+         `
+         : `<div class="muted">Keine Ports gemeldet.</div>`
+        }
+
+        <h4>Netzwerk-Endpunkte</h4>
+
+        ${
+         nets.length
+         ? `
+          <div class="endpoint-table-wrap">
+           <table class="endpoint-table">
+            <thead>
+             <tr>
+              <th>Netzwerk</th>
+              <th>IPv4</th>
+              <th>Gateway</th>
+             </tr>
+            </thead>
+            <tbody>
+             ${nets.map(n=>`
+              <tr>
+               <td>${esc(n.name||'–')}</td>
+               <td><code>${esc(n.ip||'–')}</code></td>
+               <td><code>${esc(n.gateway||'–')}</code></td>
+              </tr>
+             `).join('')}
+            </tbody>
+           </table>
+          </div>
+         `
+         : `<div class="muted">Kein Netzwerk-Endpunkt gemeldet.</div>`
+        }
+
+       </div>
+      `;
+    }).join('')
+   : `
+    <div class="card">
+     <div class="muted">
+      Keine Containerdaten verfügbar.
+     </div>
+    </div>
+   `
+  }
+ `;
+
+ setTimeout(resize,30);
+}
+
+
+
+/* RICOREWI_VOLUME_UI_5C3D */
+
+function volumeUsageMap(){
+
+ const result={};
+
+ (S.containers||[]).forEach(container=>{
+
+  (container.mounts||[]).forEach(mount=>{
+
+   if(
+    mount.type!=='volume' ||
+    !mount.name
+   ){
+    return;
+   }
+
+   if(!result[mount.name]){
+    result[mount.name]=[];
+   }
+
+   result[mount.name].push({
+    container:container.name,
+    destination:mount.destination||'–',
+    rw:mount.rw!==false
+   });
+
+  });
+
+ });
+
+ return result;
+}
+
+
+async function volumeInspect(name){
+
+ try{
+
+  const result=await actionData(
+   'volume-inspect',
+   {
+    target:name
+   },
+   'Volume untersuchen'
+  );
+
+  let output=
+   result.output ||
+   result.message ||
+   '';
+
+  try{
+   output=JSON.stringify(
+    JSON.parse(output),
+    null,
+    2
+   );
+  }catch(e){}
+
+  showDockerOutput(
+   'Volume Inspect – '+name,
+   output || 'Keine Ausgabe.'
+  );
+
+ }catch(err){
+
+  showDockerOutput(
+   'Volume Inspect fehlgeschlagen',
+   err && err.message
+    ? err.message
+    : String(err)
+  );
+
+ }
+
+}
+
+
+async function volumeCreate(){
+
+ const raw=prompt(
+  'Name des neuen Docker-Volumes:'
+ );
+
+ if(raw===null){
+  return;
+ }
+
+ const name=raw.trim();
+
+ if(!name){
+  return;
+ }
+
+ if(!/^[A-Za-z0-9_.-]+$/.test(name)){
+
+  alert(
+   'Ungültiger Volume-Name.\n\n'+
+   'Erlaubt: Buchstaben, Zahlen, Punkt, '+ 
+   'Unterstrich und Bindestrich.'
+  );
+
+  return;
+ }
+
+ if(!confirm(
+  'Docker-Volume erstellen?\n\n'+
+  name
+ )){
+  return;
+ }
+
+ try{
+
+  await actionData(
+   'volume-create',
+   {
+    target:name
+   },
+   'Volume erstellen'
+  );
+
+  await load();
+
+ }catch(err){
+
+  showDockerOutput(
+   'Volume konnte nicht erstellt werden',
+   err && err.message
+    ? err.message
+    : String(err)
+  );
+
+ }
+
+}
+
+
+async function volumeRemoveSafe(name){
+
+ const usage=volumeUsageMap();
+ const users=usage[name]||[];
+
+ if(users.length){
+
+  alert(
+   'Dieses Volume wird noch verwendet.\n\n'+
+   name+
+   '\n\n'+
+   users.map(
+    u=>'• '+u.container+
+       ' → '+u.destination
+   ).join('\n')
+  );
+
+  return;
+ }
+
+ if(!confirm(
+  'Unbenutztes Docker-Volume löschen?\n\n'+
+  name+
+  '\n\nDie gespeicherten Daten gehen verloren.'
+ )){
+  return;
+ }
+
+ if(!confirm(
+  'Letzte Sicherheitsabfrage:\n\n'+
+  name+
+  '\n\nWirklich endgültig löschen?'
+ )){
+  return;
+ }
+
+ try{
+
+  await actionData(
+   'remove-volume',
+   {
+    target:name
+   },
+   'Volume löschen'
+  );
+
+  await load();
+
+ }catch(err){
+
+  showDockerOutput(
+   'Volume konnte nicht gelöscht werden',
+   err && err.message
+    ? err.message
+    : String(err)
+  );
+
+ }
+
+}
+
+
+function volumeHtml(){
+
+ const volumes=X.volumes||[];
+ const usage=volumeUsageMap();
+
+ const used=volumes.filter(
+  v=>(usage[v.name]||[]).length>0
+ ).length;
+
+ const unused=volumes.length-used;
+
+ return `
+
+  <div class="card">
+
+   <div class="head">
+
+    <div>
+
+     <div class="name">
+      Docker Volumes
+     </div>
+
+     <div class="muted">
+      ${volumes.length} Volumes ·
+      ${used} verwendet ·
+      ${unused} unbenutzt
+     </div>
+
+    </div>
+
+    <button
+     class="btn primary"
+     onclick="volumeCreate()">
+     Volume erstellen
+    </button>
+
+   </div>
+
+   <div class="volume-summary">
+
+    <div>
+     <b>${volumes.length}</b>
+     <span>Gesamt</span>
+    </div>
+
+    <div>
+     <b>${used}</b>
+     <span>Verwendet</span>
+    </div>
+
+    <div>
+     <b>${unused}</b>
+     <span>Unbenutzt</span>
+    </div>
+
+   </div>
+
+  </div>
+
+  ${
+   volumes.length
+   ? volumes.map(v=>{
+
+      const users=usage[v.name]||[];
+
+      const labels=
+       v.labels &&
+       typeof v.labels==='object'
+        ? v.labels
+        : {};
+
+      const project=
+       labels[
+        'com.docker.compose.project'
+       ] || '';
+
+      const composeVolume=
+       labels[
+        'com.docker.compose.volume'
+       ] || '';
+
+      return `
+
+       <div class="card volume-card">
+
+        <div class="head">
+
+         <div>
+
+          <div class="name">
+           ${esc(v.name)}
+          </div>
+
+          <div class="muted">
+           Treiber ${esc(v.driver||'local')}
+          </div>
+
+         </div>
+
+         ${
+          users.length
+           ? `
+            <span class="badge ok">
+             In Verwendung
+            </span>
+           `
+           : `
+            <span class="badge warn">
+             Unbenutzt
+            </span>
+           `
+         }
+
+        </div>
+
+        <div class="volume-detail">
+
+         <b>Mountpoint</b><br>
+
+         <code>
+          ${esc(v.mountpoint||'–')}
+         </code>
+
+        </div>
+
+        ${
+         project
+          ? `
+           <div class="volume-detail">
+            <b>Compose-Projekt:</b>
+            ${esc(project)}
+
+            ${
+             composeVolume
+              ? `
+               · <b>Volume:</b>
+               ${esc(composeVolume)}
+              `
+              : ''
+            }
+           </div>
+          `
+          : ''
+        }
+
+        ${
+         users.length
+          ? `
+           <div class="volume-detail">
+
+            <b>Verwendet von</b>
+
+            <div class="volume-users">
+
+             ${users.map(u=>`
+
+              <div>
+               ${esc(u.container)}
+               →
+               <code>
+                ${esc(u.destination)}
+               </code>
+               ·
+               ${u.rw?'rw':'ro'}
+              </div>
+
+             `).join('')}
+
+            </div>
+
+           </div>
+          `
+          : `
+           <div class="volume-detail muted">
+            Dieses Volume wird derzeit von
+            keinem Container verwendet.
+           </div>
+          `
+        }
+
+        <div class="actions">
+
+         <button
+          class="btn"
+          onclick='volumeInspect(${JSON.stringify(v.name)})'>
+          Inspect
+         </button>
+
+         ${
+          !users.length
+           ? `
+            <button
+             class="btn danger"
+             onclick='volumeRemoveSafe(${JSON.stringify(v.name)})'>
+             Löschen
+            </button>
+           `
+           : ''
+         }
+
+        </div>
+
+       </div>
+
+      `;
+
+     }).join('')
+   : `
+      <div class="card">
+       <div class="muted">
+        Keine Docker-Volumes vorhanden.
+       </div>
+      </div>
+     `
+  }
+
+ `;
+}
+
+function render(){
+ renderPorts();
+ const cs=S.containers||[];
+
+ const running=cs.filter(c=>c.state==='running').length;
+ const healthy=cs.filter(c=>c.health==='healthy').length;
+ const problems=cs.filter(
+  c=>c.state!=='running'||c.health==='unhealthy'
+ ).length;
+
+ $('#overview').innerHTML=`
+ <div class="grid">
+  <div class="card"><div class="metric">${cs.length}</div><div class="muted">Container</div></div>
+  <div class="card"><div class="metric">${running}</div><div class="muted">Laufend</div></div>
+  <div class="card"><div class="metric">${healthy}</div><div class="muted">Healthy</div></div>
+  <div class="card"><div class="metric">${problems}</div><div class="muted">Probleme</div></div>
+ </div>
+
+ <div class="card">
+  <b>${esc(S.host||'Docker Host')}</b><br>
+  <span class="muted">
+   Docker ${esc(S.docker_version||'–')} ·
+   Compose ${esc(X.compose_version||'–')} ·
+   Dienst ${esc(X.docker_service||'–')}
+  </span>
+ </div>`;
+
+
+ $('#install').innerHTML=`
+  <div class="grid">
+
+   <div class="card">
+    <div class="name">Docker Engine</div>
+
+    <p class="muted">
+     Docker Engine und Docker Compose auf diesem Server
+     installieren beziehungsweise die vorhandene Installation prüfen.
+    </p>
+
+    <div class="notice help-good">
+     Unterstützt wird die eingerichtete automatische Installation
+     für Debian und Ubuntu.
+    </div>
+
+    <div class="actions">
+     <button class="btn primary"
+      onclick="action('install-engine')">
+      Docker installieren / prüfen
+     </button>
+
+     <button class="btn"
+      onclick="action('docker-version')">
+      Version & Status prüfen
+     </button>
+    </div>
+   </div>
+
+
+   <div class="card">
+    <div class="name">Docker Image</div>
+
+    <p class="muted">
+     Ein Image direkt aus Docker Hub oder einer anderen
+     Container Registry herunterladen.
+    </p>
+
+    <label><b>Image</b></label>
+
+    <input
+     id="install-image-name"
+     class="search"
+     placeholder="z. B. nginx:latest"
+     autocomplete="off">
+
+    <div class="actions">
+     <button class="btn primary"
+      onclick="installImage()">
+      Image herunterladen
+     </button>
+    </div>
+
+    <p class="muted">
+     Beispiele: nginx:latest, redis:7, ghcr.io/owner/image:latest
+    </p>
+   </div>
+
+
+   <div class="card">
+    <div class="name">GitHub / Git Repository</div>
+
+    <p class="muted">
+     Docker-Projekt direkt aus einem Git Repository installieren.
+    </p>
+
+    <label><b>Repository</b></label>
+
+    <input
+     id="install-git-url"
+     class="search"
+     placeholder="https://github.com/owner/project.git"
+     autocomplete="off">
+
+    <label><b>Branch oder Tag</b></label>
+
+    <input
+     id="install-git-ref"
+     class="search"
+     placeholder="main"
+     autocomplete="off">
+
+    <label><b>Projektname</b></label>
+
+    <input
+     id="install-git-name"
+     class="search"
+     placeholder="mein-projekt"
+     autocomplete="off">
+
+    <div class="notice">
+     Das Repository wird unter /opt/docker installiert.
+     Enthält es eine Compose-Datei, wird diese vor dem Start validiert.
+    </div>
+
+    <div class="actions">
+     <button
+      class="btn primary"
+      onclick="installGitProject()">
+      Repository installieren
+     </button>
+    </div>
+   </div>
+
+
+   <div class="card">
+    <div class="name">Docker Run</div>
+
+    <p class="muted">
+     Container manuell erstellen. Aus Sicherheitsgründen wird hier
+     keine beliebige Root-Shell ausgeführt.
+    </p>
+
+    <label><b>Docker-Befehl</b></label>
+
+    <textarea
+     id="install-docker-command"
+     class="search"
+     style="min-height:120px;font-family:monospace"
+     placeholder="docker run -d --name mein-container nginx:latest"></textarea>
+
+    <div class="notice">
+     Der Befehl wird serverseitig geprüft.
+     Shell-Verkettungen, privilegierte Container und kritische Host-Mounts
+     werden nicht zugelassen.
+    </div>
+
+    <div class="actions">
+     <button
+      class="btn primary"
+      onclick="installDockerCommand()">
+      Docker-Befehl ausführen
+     </button>
+    </div>
+   </div>
+
+
+   <div class="card">
+    <div class="name">Docker Compose</div>
+
+    <p class="muted">
+     Für Projekte mit compose.yaml oder docker-compose.yml.
+    </p>
+
+    <label><b>Projektverzeichnis</b></label>
+
+    <input
+     id="install-compose-path"
+     class="search"
+     placeholder="/opt/docker/mein-projekt"
+     autocomplete="off">
+
+    <div class="actions">
+     <button
+      class="btn primary"
+      onclick="installComposeProject()">
+      Compose-Projekt starten
+     </button>
+    </div>
+
+    <div class="notice">
+     Es werden ausschließlich Projekte unter /opt/docker akzeptiert.
+    </div>
+   </div>
+
+
+   <div class="card">
+    <div class="name">Installationsmöglichkeiten</div>
+
+    <p>
+     Der Docker Manager unterstützt damit folgende Installationswege:
+    </p>
+
+    <ul>
+     <li>Docker Engine + Compose</li>
+     <li>Docker Images aus Registries</li>
+     <li>GitHub-/Git-Projekte</li>
+     <li>Docker Compose</li>
+     <li>validierte docker-run-Befehle</li>
+    </ul>
+
+    <p class="muted">
+     Installationen werden zentral über den KeyHelp Docker Manager
+     verwaltet.
+    </p>
+   </div>
+
+  </div>
+ `;
+
+
+ const projects=P.projects||[];
+
+ $('#projects').innerHTML=`
+ <div class="card">
+
+  <div class="head">
+   <div>
+    <div class="name">Docker Projekte / Stacks</div>
+    <div class="muted">
+     ${projects.length} Compose-Projekt(e) unter /opt/docker
+     · Stand ${esc(P.updated||'–')}
+    </div>
+   </div>
+
+   <button class="btn"
+    onclick="load()">
+    Aktualisieren
+   </button>
+  </div>
+
+  ${
+   projects.length
+    ? projects.map(projectRow).join('')
+    : `
+      <div class="notice">
+       Noch keine Compose-Projekte unter
+       <code>/opt/docker</code> gefunden.
+       Projekte können über den Tab
+       <b>Installieren</b> hinzugefügt werden.
+      </div>
+     `
+  }
+
+ </div>
+
+ <div class="card">
+  <div class="name">Stack-Verwaltung</div>
+
+  <p class="muted">
+   Projekte werden automatisch anhand einer
+   compose.yaml, compose.yml, docker-compose.yml
+   oder docker-compose.yaml erkannt.
+  </p>
+
+  <div class="notice help-warning">
+   <b>Down</b> entfernt die Container und Compose-Netzwerke
+   des Projekts. Volumes und Projektdateien werden dabei
+   bewusst nicht gelöscht.
+  </div>
+ </div>
+ `;
+
+ $('#containers').innerHTML=`
+  <input id="q" class="search" placeholder="Container oder Image suchen">
+  <div id="container-list" class="card">
+   ${cs.map(containerRow).join('')}
+  </div>`;
+
+ $('#q').oninput=e=>{
+  const q=e.target.value.toLowerCase();
+
+  $('#container-list').innerHTML=
+   cs.filter(c=>
+    (c.name+' '+c.image).toLowerCase().includes(q)
+   ).map(containerRow).join('');
+
+  resize();
+ };
+
+ $('#images').innerHTML=`
+ <div class="card">
+  <div class="head">
+   <div>
+    <div class="name">Docker Images</div>
+    <div class="muted">${(X.images||[]).length} Images</div>
+   </div>
+   <button class="btn" onclick="action('prune-images')">Ungenutzte bereinigen</button>
+  </div>
+
+  ${(X.images||[]).map(x=>{
+   const repo=x.Repository||x.repository||'<none>';
+   const tag=x.Tag||x.tag||'<none>';
+   const ref=repo+(tag&&tag!=='<none>'?':'+tag:'');
+
+   return `
+    <div class="item">
+     <div class="head">
+      <div>
+       <div class="name">${esc(ref)}</div>
+       <div class="muted">
+        ${esc(x.Size||x.size||'–')} ·
+        ${esc(x.CreatedSince||x.createdSince||'')}
+       </div>
+      </div>
+     </div>
+     <div class="actions">
+      ${repo!=='<none>'?
+       `<button class="btn primary" onclick="action('pull-image','${esc(ref)}')">Pull</button>`
+       :''
+      }
+      ${repo!=='<none>'?
+       `<button class="btn danger" onclick="action('remove-image','${esc(ref)}')">Löschen</button>`
+       :''
+      }
+     </div>
+    </div>`;
+  }).join('')}
+ </div>`;
+
+ $('#volumes').innerHTML=volumeHtml();
+
+ renderNetworks();
+
+ const us=U.containers||[];
+
+ $('#updates').innerHTML=`
+ <div class="card">
+  <div class="head">
+   <div>
+    <div class="name">Container/Image Updates</div>
+    <div class="muted">Letzte Prüfung: ${esc(U.checked||'–')}</div>
+   </div>
+   <button class="btn primary" onclick="action('update-check')">Jetzt prüfen</button>
+  </div>
+
+  ${us.map(x=>`
+   <div class="item">
+    <b>${esc(x.container)}</b><br>
+    <span class="muted">${esc(x.image)}</span>
+    <span class="badge">${esc(x.status)}</span>
+
+    ${x.status==='update_available'
+     ? `<div class="actions">
+         <button class="btn warn"
+          onclick="action('update','${esc(x.container)}')">
+          Backup + Update
+         </button>
+        </div>`
+     :''
+    }
+   </div>
+  `).join('')}
+ </div>`;
+
+ $('#backups').innerHTML=`
+ <div class="card">
+  <div class="name">Docker Backups</div>
+  <p>
+   Container-/Compose-Konfiguration und persistente Docker-Daten
+   werden über das bestehende Backup-System gesichert.
+  </p>
+
+  <button class="btn primary" onclick="action('backup')">
+   Backup jetzt erstellen
+  </button>
+
+  <p class="muted">
+   Restore bleibt bewusst anwendungsspezifisch.
+   Datenbanken sollten konsistent über Dump/Restore behandelt werden.
+  </p>
+ </div>`;
+
+ $('#system').innerHTML=`
+ <div class="card">
+  <div class="name">Docker System</div>
+
+  <table>
+   <tr><th>Engine</th><td>${esc(S.docker_version||'–')}</td></tr>
+   <tr><th>Compose</th><td>${esc(X.compose_version||'–')}</td></tr>
+   <tr><th>Dienst</th><td>${esc(X.docker_service||'–')}</td></tr>
+   <tr><th>Host</th><td>${esc(S.host||'–')}</td></tr>
+  </table>
+
+  <div class="actions">
+   <button class="btn primary" onclick="action('docker-version')">
+    Version & Speicher prüfen
+   </button>
+
+   <button class="btn" onclick="action('install-engine')">
+    Docker installieren / prüfen
+   </button>
+
+   <button class="btn" onclick="action('prune-build-cache')">
+    Build-Cache bereinigen
+   </button>
+  </div>
+ </div>
+
+ <div class="card">
+  <div class="name">Docker Speicher</div>
+
+  ${(X.disk||[]).map(d=>`
+   <div class="item">
+    <b>${esc(d.Type||d.type||'Docker')}</b>
+    <div class="muted">
+     Gesamt: ${esc(d.TotalCount||d.totalCount||'–')} ·
+     Aktiv: ${esc(d.Active||d.active||'–')} ·
+     Größe: ${esc(d.Size||d.size||'–')} ·
+     Freigebbar: ${esc(d.Reclaimable||d.reclaimable||'–')}
+    </div>
+   </div>
+  `).join('')}
+ </div>`;
+
+
+ // RicoReWi Docker Manager Dokumentation
+ $('#help').innerHTML=`
+ <div class="card">
+  <div class="name">Docker Manager – Hilfe & Dokumentation</div>
+  <div class="muted">
+   Verwaltung der Docker-Umgebung direkt über das KeyHelp-Admininterface.
+  </div>
+
+  <div class="notice help-warning" style="margin-top:14px">
+   <b>Wichtig:</b>
+   Container, Images und besonders Volumes können produktive Dienste
+   und dauerhafte Daten enthalten. Vor Updates oder Löschaktionen
+   sollten aktuelle Backups vorhanden sein.
+  </div>
+ </div>
+
+ <div class="help-grid">
+
+  <div class="card">
+   <h3>Container</h3>
+   <p><b>Start</b> – startet einen gestoppten Container.</p>
+   <p><b>Stop</b> – beendet einen laufenden Container.</p>
+   <p><b>Neustart</b> – startet einen Container kontrolliert neu.</p>
+   <p><b>Logs</b> – zeigt die aktuelle Programmausgabe.</p>
+   <p><b>Inspect</b> – zeigt Docker-Konfiguration und Metadaten.</p>
+   <p><b>Update</b> – führt die eingerichtete Aktualisierung aus.</p>
+  </div>
+
+  <div class="card">
+   <h3>Images</h3>
+   <p>
+    Images sind die Vorlagen, aus denen Container erstellt werden.
+   </p>
+   <p><b>Pull</b> – lädt ein Image bzw. eine aktuelle Version.</p>
+   <p><b>Löschen</b> – entfernt ein nicht mehr benötigtes Image.</p>
+   <p>
+    <b>Ungenutzte Images bereinigen</b> entfernt von Docker als
+    ungenutzt erkannte Images.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Volumes</h3>
+   <p>
+    Volumes speichern dauerhafte Daten unabhängig vom Container.
+   </p>
+   <div class="notice help-danger">
+    <b>Achtung:</b> Ein Volume kann Datenbanken, Uploads,
+    Konfigurationen oder andere nicht ersetzbare Daten enthalten.
+    Nur löschen, wenn es sicher nicht mehr benötigt wird.
+   </div>
+  </div>
+
+  <div class="card">
+   <h3>Netzwerke</h3>
+   <p>
+    Docker-Netzwerke verbinden Container miteinander.
+   </p>
+   <p>
+    Angezeigte interne IP-Adressen gehören zum Docker-Netz und sind
+    normalerweise keine öffentlichen Serveradressen.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Updates</h3>
+   <p>
+    <b>Updates prüfen</b> führt die eingerichtete Prüfung der
+    Docker-Images bzw. Container aus.
+   </p>
+   <p>
+    Bei produktiven Diensten empfiehlt sich:
+   </p>
+   <ol>
+    <li>Backup erstellen</li>
+    <li>Update prüfen</li>
+    <li>betroffenen Dienst aktualisieren</li>
+    <li>Status und Logs kontrollieren</li>
+   </ol>
+  </div>
+
+  <div class="card">
+   <h3>Backups</h3>
+   <p>
+    Der Backup-Bereich startet die serverseitig eingerichtete
+    Docker-Backup-Routine.
+   </p>
+   <p>
+    Datenbank-Container können zusätzlich einen Datenbank-Dump
+    benötigen, damit ein konsistenter Restore möglich ist.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Docker System</h3>
+   <p>
+    Der Systembereich zeigt unter anderem:
+   </p>
+   <ul>
+    <li>Docker Engine</li>
+    <li>Docker Compose</li>
+    <li>Dienststatus</li>
+    <li>Images</li>
+    <li>Volumes</li>
+    <li>Netzwerke</li>
+    <li>Docker-Speicherbelegung</li>
+   </ul>
+   <p>
+    <b>Build-Cache bereinigen</b> entfernt nicht mehr benötigte
+    Build-Zwischendaten.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Docker installieren / prüfen</h3>
+   <p>
+    Diese Funktion verwendet die von uns eingerichtete serverseitige
+    Installations- bzw. Prüfroutine.
+   </p>
+   <p>
+    Eine bereits funktionierende Docker-Installation soll dadurch
+    nicht unnötig ersetzt werden.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Sicherheit</h3>
+   <p>
+    Der Manager benötigt keinen separaten Docker-Account.
+   </p>
+   <p>
+    Aktionen werden über die KeyHelp-Integration an die begrenzte
+    serverseitige Docker-Aktionsschnittstelle weitergegeben.
+   </p>
+   <p>
+    Der Browser erhält keinen direkten Zugriff auf
+    <code>/var/run/docker.sock</code>.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Automatische Statusdaten</h3>
+   <p>
+    Die Status-Collector aktualisieren die Informationen zu
+    Containern und Docker-System regelmäßig.
+   </p>
+   <p>
+    Die Oberfläche liest dafür unter anderem
+    <code>status.json</code> und <code>system.json</code>.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Fehlerdiagnose</h3>
+
+   <p>
+    <b>Aktion nicht erlaubt</b><br>
+    Die Aktion ist nicht gleichzeitig in API und Action-Wrapper
+    freigegeben.
+   </p>
+
+   <p>
+    <b>Autorisierung fehlt</b><br>
+    Die KeyHelp-Authentifizierung wurde nicht korrekt an die
+    Docker-Schnittstelle weitergegeben.
+   </p>
+
+   <p>
+    <b>HTTP 500</b><br>
+    Die serverseitige Aktion oder Apache/CGI ist fehlgeschlagen.
+   </p>
+
+   <p>
+    <b>Container unhealthy</b><br>
+    Der Container läuft, sein konfigurierter Healthcheck meldet
+    jedoch einen Fehler.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Server-Komponenten</h3>
+
+   <table>
+    <tr>
+     <th>Komponente</th>
+     <th>Aufgabe</th>
+    </tr>
+    <tr>
+     <td>Docker Status Collector</td>
+     <td>Containerstatus und Ressourcen</td>
+    </tr>
+    <tr>
+     <td>System Collector</td>
+     <td>Images, Volumes, Netzwerke und Speicher</td>
+    </tr>
+    <tr>
+     <td>Action API</td>
+     <td>Verwaltungsaktionen aus KeyHelp</td>
+    </tr>
+    <tr>
+     <td>Action Wrapper</td>
+     <td>Begrenzt privilegierte Docker-Befehle</td>
+    </tr>
+    <tr>
+     <td>systemd Timer</td>
+     <td>Regelmäßige Aktualisierung und Wartung</td>
+    </tr>
+   </table>
+  </div>
+
+  <div class="card">
+   <h3>Empfohlener Update-Ablauf</h3>
+
+   <ol>
+    <li>Status des Containers prüfen</li>
+    <li>Backup erstellen</li>
+    <li>Update-Prüfung durchführen</li>
+    <li>Update starten</li>
+    <li>Containerstatus kontrollieren</li>
+    <li>Logs auf Fehler prüfen</li>
+   </ol>
+
+   <div class="notice help-good">
+    So bleibt der Update-Vorgang nachvollziehbar und ein Backup
+    steht vor Änderungen zur Verfügung.
+   </div>
+  </div>
+
+  <div class="card">
+   <h3>Manager-Version</h3>
+   <p><b>RicoReWi KeyHelp Docker Manager</b></p>
+   <p>Build 5C.2 · Projekte / Stacks · 29.09.2026</p>
+   <p class="muted">
+    Integriert in die bestehende KeyHelp-Administration.
+   </p>
+  </div>
+
+ </div>
+ `;
+
+ renderRegistry();
+
+ resize();
+}
+
+async function load(){
+ try{
+  [S,U,X,P,R]=await Promise.all([
+   fetch('../status.json?'+Date.now()).then(r=>r.json()),
+   fetch('../updates.json?'+Date.now())
+    .then(r=>r.json())
+    .catch(()=>({containers:[]})),
+   fetch('../system.json?'+Date.now())
+    .then(r=>r.json())
+    .catch(()=>({images:[],volumes:[],networks:[],disk:[]})),
+   fetch('../projects.json?'+Date.now())
+    .then(r=>r.json())
+    .catch(()=>({projects:[],count:0})),
+    fetch('../registries.json?'+Date.now(),{
+     cache:'no-store'
+    })
+     .then(r=>{
+      if(!r.ok){
+       throw new Error(
+        'registries.json HTTP '+r.status
+       );
+      }
+      return r.json();
+     })
+     .catch(()=>({
+      registries:[],
+      updated:null
+     }))
+  ]);
+
+  render();
+
+ }catch(e){
+  $('#msg').innerHTML=
+   '<div class="notice bad">'+esc(e.message)+'</div>';
+ }
+}
+
+document.querySelectorAll('.tabs button').forEach(
+ b=>b.onclick=()=>view(b.dataset.v)
+);
+
+view((location.hash||'#overview').slice(1));
+
+load();
+setInterval(load,30000);
+</script>
+</body>
+</html>
