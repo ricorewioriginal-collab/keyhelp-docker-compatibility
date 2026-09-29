@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-exec "$(cd "$(dirname "$0")" && pwd)/install.sh"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec bash "$ROOT/install.sh"
