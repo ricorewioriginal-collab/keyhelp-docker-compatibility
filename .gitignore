@@ -1,0 +1,20 @@
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Local secrets and credentials
+*.secret
+.env
+.env.*
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local archives / backups
+*.tar
+*.tar.gz
+*.zip
+*.bak
